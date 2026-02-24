@@ -1,14 +1,15 @@
 // src/controllers/userController.ts
 import { Request, Response } from "express";
-import User from "../models/User";
-import { sendUserResponse } from "../utils/userUtils";
+import { supabase } from "../config/supabase";
+import { sendUserResponse, updateUserAndCache } from "../utils/userUtils";
+import { userCache } from "../server";
 
 interface AuthRequest extends Request {
     user?: { telegramId: string };
 }
 
 export const getProfile = async (req: AuthRequest, res: Response) => {
-    const user = await User.findOne({ telegramId: req.user!.telegramId });
+    const { data: user } = await supabase.from("users").select("*").eq("telegram_id", req.user!.telegramId).single();
     if (!user) return res.status(404).json({ message: "User not found" });
 
     res.json(sendUserResponse(user)); // Используем стандартный ответ
@@ -16,10 +17,10 @@ export const getProfile = async (req: AuthRequest, res: Response) => {
 
 export const connectTonWallet = async (req: AuthRequest, res: Response) => {
     const { tonWallet } = req.body;
-    const user = await User.findOne({ telegramId: req.user!.telegramId });
+    const { data: user } = await supabase.from("users").select("*").eq("telegram_id", req.user!.telegramId).single();
     if (!user) return res.status(404).json({ message: "User not found" });
 
-    user.tonWallet = tonWallet;
-    await user.save();
+    user.ton_wallet = tonWallet;
+    await updateUserAndCache(user, userCache);
     res.json({ message: "TON wallet connected", ...sendUserResponse(user) }); // Добавляем полный ответ
 };

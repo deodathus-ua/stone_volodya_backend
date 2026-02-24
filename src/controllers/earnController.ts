@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
-import User, { IUser } from "../models/User";
+import { supabase } from "../config/supabase";
+import { IUser } from "../types/database";
 import { userCache } from "../server";
 import { updateUserAndCache, sendUserResponse } from "../utils/userUtils";
 
@@ -20,24 +21,27 @@ export const completeTask = async (req: Request, res: Response) => {
     if (!availableTasks[taskName]) return res.status(400).json({ error: "Invalid task name" });
 
     try {
-        const user = await User.findOne({ telegramId });
+        const { data: user } = await supabase.from("users").select("*").eq("telegram_id", telegramId).single();
         if (!user) return res.status(404).json({ error: "User not found" });
 
+        if (!user.tasks_completed) user.tasks_completed = [];
+
         // Проверка, завершена ли задача
-        if (user.tasksCompleted.includes(taskName)) {
+        if (user.tasks_completed.includes(taskName)) {
             return res.status(400).json({ error: "Task already completed" });
         }
 
         // Восстановление энергии
         const now = new Date();
-        const timeDiff = Math.floor((now.getTime() - user.lastEnergyUpdate.getTime()) / 1000);
-        user.energy = Math.min(user.maxEnergy, user.energy + timeDiff * user.energyRegenRate);
-        user.lastEnergyUpdate = now;
+        const lastUpdate = user.last_energy_update ? new Date(user.last_energy_update) : now;
+        const timeDiff = Math.floor((now.getTime() - lastUpdate.getTime()) / 1000);
+        user.energy = Math.min(user.max_energy, user.energy + timeDiff * user.energy_regen_rate);
+        user.last_energy_update = now;
 
         // Начисление награды и отметка задачи
         const reward = availableTasks[taskName];
         user.stones += reward;
-        user.tasksCompleted.push(taskName);
+        user.tasks_completed.push(taskName);
 
         await updateUserAndCache(user, userCache);
         res.json(sendUserResponse(user));

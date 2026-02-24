@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import User from "../models/User";
+import { supabase } from "../config/supabase";
 import { TonClient, WalletContractV4, internal, JettonMaster, JettonWallet, Address, toNano, beginCell } from "@ton/ton";
 import { mnemonicToPrivateKey } from "ton-crypto";
 import { updateUserAndCache, sendUserResponse } from "../utils/userUtils";
@@ -31,7 +31,7 @@ export const addAirdropProgress = async (req: AuthRequest, res: Response) => {
     }
 
     try {
-        const user = await User.findOne({ telegramId });
+        const { data: user } = await supabase.from("users").select("*").eq("telegram_id", telegramId).single();
         if (!user) {
             console.log("[addAirdropProgress] Error: User not found for telegramId:", telegramId);
             return res.status(404).json({ message: "User not found" });
@@ -43,8 +43,8 @@ export const addAirdropProgress = async (req: AuthRequest, res: Response) => {
         }
 
         user.stones -= stonesToAdd;
-        user.airdropProgress = Math.min(user.airdropProgress + stonesToAdd, 500_000);
-        console.log("[addAirdropProgress] Updated user:", { stones: user.stones, airdropProgress: user.airdropProgress });
+        user.airdrop_progress = Math.min((user.airdrop_progress || 0) + stonesToAdd, 500_000);
+        console.log("[addAirdropProgress] Updated user:", { stones: user.stones, airdropProgress: user.airdrop_progress });
 
         await updateUserAndCache(user, userCache);
         res.json(sendUserResponse(user)); // Убедись, что airdropProgress возвращается
@@ -62,11 +62,14 @@ export const claimAirdrop = async (req: AuthRequest, res: Response) => {
     airdropLocks[telegramId] = true;
 
     try {
-        const user = await User.findOne({ telegramId });
+        const { data: user } = await supabase.from("users").select("*").eq("telegram_id", telegramId).single();
         if (!user) return res.status(404).json({ message: "User not found" });
-        if (!user.tonWallet) return res.status(400).json({ message: "TON wallet not connected" });
-        if (user.tasksCompleted.includes("airdrop")) return res.status(400).json({ message: "Airdrop already claimed" });
-        if (user.airdropProgress < AIRDROP_REQUIRED_PROGRESS) {
+        if (!user.ton_wallet) return res.status(400).json({ message: "TON wallet not connected" });
+        
+        if (!user.tasks_completed) user.tasks_completed = [];
+        if (user.tasks_completed.includes("airdrop")) return res.status(400).json({ message: "Airdrop already claimed" });
+        
+        if ((user.airdrop_progress || 0) < AIRDROP_REQUIRED_PROGRESS) {
             return res.status(400).json({ message: "Not enough progress to claim airdrop" });
         }
 
@@ -96,7 +99,7 @@ export const claimAirdrop = async (req: AuthRequest, res: Response) => {
             .storeUint(0xf8a7ea5, 32)
             .storeUint(0, 64)
             .storeCoins(BigInt(AIRDROP_AMOUNT * 10 ** 9))
-            .storeAddress(Address.parse(user.tonWallet))
+            .storeAddress(Address.parse(user.ton_wallet))
             .storeAddress(wallet.address)
             .storeMaybeRef(null)
             .storeCoins(toNano("0"))
@@ -112,8 +115,8 @@ export const claimAirdrop = async (req: AuthRequest, res: Response) => {
         });
 
         // Сбрасываем прогресс после получения аирдропа
-        user.airdropProgress = 0;
-        user.tasksCompleted.push("airdrop");
+        user.airdrop_progress = 0;
+        user.tasks_completed.push("airdrop");
         await updateUserAndCache(user, userCache);
         res.json(sendUserResponse(user));
     } catch (error) {

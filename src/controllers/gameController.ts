@@ -1,10 +1,8 @@
 import { Request, Response } from "express";
-import { Document } from "mongoose";
-import User, { IUser, IBoost, IInvitedFriend } from "../models/User";
+import { supabase } from "../config/supabase";
+import { IUser, IBoost, IInvitedFriend } from "../types/database";
 import { io, userCache } from "../server";
 import { updateUserAndCache, sendUserResponse } from "../utils/userUtils";
-
-type UserDocument = IUser & Document;
 
 export interface Boost {
     name: string;
@@ -14,7 +12,6 @@ export interface Boost {
 
 export type BoostName = "RechargeSpeed" | "BatteryPack" | "MultiTap" | "AutoBot" | "Refill" | "Boost";
 
-// Расчёт стоимости буста
 export const getBoostCost = (boostName: BoostName, level: number): number => {
     const costs: { [key in BoostName]?: number[] } = {
         MultiTap: [500, 700, 1000, 1400, 2000, 3400, 4700, 6500, 9000, 13000, 18000],
@@ -27,7 +24,6 @@ export const getBoostCost = (boostName: BoostName, level: number): number => {
     return costs[boostName]?.[Math.min(level, costs[boostName].length - 1)] || 0;
 };
 
-// Получение бонуса от буста
 export const getBoostBonus = (boostName: BoostName, level: number): string => {
     const nextLevel = level + 1;
     switch (boostName) {
@@ -41,38 +37,38 @@ export const getBoostBonus = (boostName: BoostName, level: number): string => {
     }
 };
 
-// Обновление энергии пользователя
-const updateEnergy = (user: UserDocument, now: Date): void => {
-    const timeDiff = Math.floor((now.getTime() - user.lastEnergyUpdate.getTime()) / 1000);
-    user.energy = Math.min(user.maxEnergy, user.energy + timeDiff * user.energyRegenRate);
-    user.lastEnergyUpdate = now;
+const updateEnergy = (user: IUser, now: Date): void => {
+    const lastUpdate = user.last_energy_update ? new Date(user.last_energy_update) : now;
+    const timeDiff = Math.floor((now.getTime() - lastUpdate.getTime()) / 1000);
+    user.energy = Math.min(user.max_energy, user.energy + timeDiff * user.energy_regen_rate);
+    user.last_energy_update = now;
 };
 
-// Обработка реферального бонуса
-const handleReferralBonus = async (user: UserDocument, stonesEarned: number): Promise<void> => {
-    if (!user.referredBy) return;
+const handleReferralBonus = async (user: IUser, stonesEarned: number): Promise<void> => {
+    if (!user.referred_by) return;
 
-    const referrer = await User.findOne({ referralCode: user.referredBy }) as UserDocument | null;
+    const { data: referrer } = await supabase.from("users").select("*").eq("referral_code", user.referred_by).single();
     if (!referrer) return;
 
     const bonus = Math.floor(stonesEarned * 0.05);
     referrer.stones += bonus;
-    referrer.referralBonus = (referrer.referralBonus || 0) + bonus;
+    referrer.referral_bonus = (referrer.referral_bonus || 0) + bonus;
 
-    const invitedFriend = referrer.invitedFriends.find(
-        (f: IInvitedFriend) => f.user.toString() === user._id.toString()
+    if (!referrer.invited_friends) referrer.invited_friends = [];
+
+    const invitedFriend = referrer.invited_friends.find(
+        (f: IInvitedFriend) => f.user === user.id
     );
     if (!invitedFriend) {
-        referrer.invitedFriends.push({ user: user._id, lastReferralStones: bonus });
+        referrer.invited_friends.push({ user: user.id, lastReferralStones: bonus });
     } else {
         invitedFriend.lastReferralStones += bonus;
     }
 
     await updateUserAndCache(referrer, userCache);
-    io.to(referrer.telegramId).emit("userUpdate", sendUserResponse(referrer));
+    io.to(referrer.telegram_id).emit("userUpdate", sendUserResponse(referrer));
 };
 
-// Обновление баланса пользователя
 export const updateBalance = async (req: Request, res: Response) => {
     const { telegramId, stones, energy, isAutobot = false } = req.body;
 
@@ -81,49 +77,47 @@ export const updateBalance = async (req: Request, res: Response) => {
     }
 
     try {
-        const user = await User.findOne({ telegramId }) as UserDocument | null;
+        const { data: user } = await supabase.from("users").select("*").eq("telegram_id", telegramId).single();
         if (!user) return res.status(404).json({ error: "User not found" });
 
         const cachedUser = userCache.get(telegramId) || {
             stones: user.stones,
-            autoStonesPerSecond: user.autoStonesPerSecond,
-            lastAutoBotUpdate: user.lastAutoBotUpdate,
+            autoStonesPerSecond: user.auto_stones_per_second,
+            lastAutoBotUpdate: user.last_auto_bot_update ? new Date(user.last_auto_bot_update) : new Date(),
             league: user.league,
         };
         const now = new Date();
 
-        const boostMultiplier = user.boostActiveUntil && now < user.boostActiveUntil ? 2 : 1;
+        const boostActiveUntil = user.boost_active_until ? new Date(user.boost_active_until) : null;
+        const boostMultiplier = boostActiveUntil && now < boostActiveUntil ? 2 : 1;
 
-        // Проверка на частоту кликов (макс 5 кликов/сек)
-        if (!isAutobot && user.lastClickTime) {
-            const timeSinceLastClick = (now.getTime() - user.lastClickTime.getTime()) / 1000;
+        if (!isAutobot && user.last_click_time) {
+            const timeSinceLastClick = (now.getTime() - new Date(user.last_click_time).getTime()) / 1000;
             if (timeSinceLastClick < 0.2) {
                 return res.status(400).json({ error: "Clicking too fast!" });
             }
         }
-        user.lastClickTime = now;
+        user.last_click_time = now;
 
-        // Обновление энергии
         updateEnergy(user, now);
 
-        // Пассивная добыча от AutoBot
-        if (user.autoStonesPerSecond > 0) {
-            const timeDiff = Math.floor((now.getTime() - user.lastAutoBotUpdate.getTime()) / 1000);
+        if (user.auto_stones_per_second > 0) {
+            const lastAutoUpdate = user.last_auto_bot_update ? new Date(user.last_auto_bot_update) : now;
+            const timeDiff = Math.floor((now.getTime() - lastAutoUpdate.getTime()) / 1000);
             if (timeDiff > 0) {
-                const stonesEarned = Math.floor(user.autoStonesPerSecond * timeDiff * boostMultiplier);
+                const stonesEarned = Math.floor(user.auto_stones_per_second * timeDiff * boostMultiplier);
                 cachedUser.stones += stonesEarned;
                 await handleReferralBonus(user, stonesEarned);
-                user.lastAutoBotUpdate = now;
+                user.last_auto_bot_update = now;
             }
         }
 
-        // Обработка кликов
         if (typeof stones === "number" && stones > 0) {
             const stonesEarned = stones * boostMultiplier;
             if (isAutobot) {
                 cachedUser.stones += stonesEarned;
             } else {
-                const energyCostPerClick = Math.ceil(Math.pow(user.stonesPerClick, 1.2) / 10);
+                const energyCostPerClick = Math.ceil(Math.pow(user.stones_per_click, 1.2) / 10);
                 if (user.energy < energyCostPerClick) {
                     return res.status(400).json({ error: `Not enough energy, required: ${energyCostPerClick}` });
                 }
@@ -133,9 +127,8 @@ export const updateBalance = async (req: Request, res: Response) => {
             }
         }
 
-        // Обновление энергии, если передано
         if (typeof energy === "number") {
-            user.energy = Math.max(0, Math.min(energy, user.maxEnergy));
+            user.energy = Math.max(0, Math.min(energy, user.max_energy));
         }
 
         user.stones = cachedUser.stones;
@@ -149,7 +142,6 @@ export const updateBalance = async (req: Request, res: Response) => {
     }
 };
 
-// Применение платного буста
 export const applyBoost = async (req: Request, res: Response) => {
     const { telegramId, boostName } = req.body;
 
@@ -158,10 +150,12 @@ export const applyBoost = async (req: Request, res: Response) => {
     }
 
     try {
-        const user = await User.findOne({ telegramId }) as UserDocument | null;
+        const { data: user } = await supabase.from("users").select("*").eq("telegram_id", telegramId).single();
         if (!user) return res.status(404).json({ error: "User not found" });
 
-        let boost = user.boosts.find(b => b.name === boostName);
+        if (!user.boosts) user.boosts = [];
+
+        let boost = user.boosts.find((b: IBoost) => b.name === boostName);
         if (!boost) {
             boost = { name: boostName as BoostName, level: 0 };
             user.boosts.push(boost);
@@ -180,11 +174,10 @@ export const applyBoost = async (req: Request, res: Response) => {
         if (cost > 0) user.stones -= cost;
         boost.level += 1;
 
-        // Пересчет характеристик
-        user.energyRegenRate = 1 + (user.boosts.find(b => b.name === "RechargeSpeed")?.level || 0);
-        user.stonesPerClick = 2 + 2 * (user.boosts.find(b => b.name === "MultiTap")?.level || 0);
-        user.maxEnergy = 1000 + 500 * (user.boosts.find(b => b.name === "BatteryPack")?.level || 0);
-        user.autoStonesPerSecond = 1 + (user.boosts.find(b => b.name === "AutoBot")?.level || 0);
+        user.energy_regen_rate = 1 + (user.boosts.find((b: IBoost) => b.name === "RechargeSpeed")?.level || 0);
+        user.stones_per_click = 2 + 2 * (user.boosts.find((b: IBoost) => b.name === "MultiTap")?.level || 0);
+        user.max_energy = 1000 + 500 * (user.boosts.find((b: IBoost) => b.name === "BatteryPack")?.level || 0);
+        user.auto_stones_per_second = 1 + (user.boosts.find((b: IBoost) => b.name === "AutoBot")?.level || 0);
 
         await updateUserAndCache(user, userCache);
         const response = sendUserResponse(user);
@@ -196,24 +189,23 @@ export const applyBoost = async (req: Request, res: Response) => {
     }
 };
 
-// Использование Refill
 export const useRefill = async (req: Request, res: Response) => {
     const { telegramId } = req.body;
 
     if (!telegramId) return res.status(400).json({ error: "telegramId required" });
 
     try {
-        const user = await User.findOne({ telegramId }) as UserDocument | null;
+        const { data: user } = await supabase.from("users").select("*").eq("telegram_id", telegramId).single();
         if (!user) return res.status(404).json({ error: "User not found" });
 
         const now = new Date();
         const oneDayMs = 24 * 60 * 60 * 1000;
-        if (user.refillLastUsed && (now.getTime() - user.refillLastUsed.getTime()) < oneDayMs) {
+        if (user.refill_last_used && (now.getTime() - new Date(user.refill_last_used).getTime()) < oneDayMs) {
             return res.status(400).json({ error: "Refill available once per day" });
         }
 
-        user.energy = user.maxEnergy;
-        user.refillLastUsed = now;
+        user.energy = user.max_energy;
+        user.refill_last_used = now;
 
         await updateUserAndCache(user, userCache);
         const response = sendUserResponse(user);
@@ -225,24 +217,23 @@ export const useRefill = async (req: Request, res: Response) => {
     }
 };
 
-// Использование Boost
 export const useBoost = async (req: Request, res: Response) => {
     const { telegramId } = req.body;
 
     if (!telegramId) return res.status(400).json({ error: "telegramId required" });
 
     try {
-        const user = await User.findOne({ telegramId }) as UserDocument | null;
+        const { data: user } = await supabase.from("users").select("*").eq("telegram_id", telegramId).single();
         if (!user) return res.status(404).json({ error: "User not found" });
 
         const now = new Date();
         const oneDayMs = 24 * 60 * 60 * 1000;
-        if (user.boostLastUsed && (now.getTime() - user.boostLastUsed.getTime()) < oneDayMs) {
+        if (user.boost_last_used && (now.getTime() - new Date(user.boost_last_used).getTime()) < oneDayMs) {
             return res.status(400).json({ error: "Boost available once per day" });
         }
 
-        user.boostLastUsed = now;
-        user.boostActiveUntil = new Date(now.getTime() + 60 * 1000); // 1 минута
+        user.boost_last_used = now;
+        user.boost_active_until = new Date(now.getTime() + 60 * 1000);
 
         await updateUserAndCache(user, userCache);
         const response = sendUserResponse(user);
@@ -254,7 +245,6 @@ export const useBoost = async (req: Request, res: Response) => {
     }
 };
 
-// Покупка скина
 export const buySkin = async (req: Request, res: Response) => {
     const { telegramId, skinName } = req.body;
 
@@ -263,10 +253,12 @@ export const buySkin = async (req: Request, res: Response) => {
     }
 
     try {
-        const user = await User.findOne({ telegramId }) as UserDocument | null;
+        const { data: user } = await supabase.from("users").select("*").eq("telegram_id", telegramId).single();
         if (!user) return res.status(404).json({ error: "User not found" });
 
         updateEnergy(user, new Date());
+
+        if (!user.skins) user.skins = [];
 
         if (user.skins.includes(skinName)) {
             return res.status(400).json({ error: "Skin already owned" });
@@ -288,7 +280,6 @@ export const buySkin = async (req: Request, res: Response) => {
     }
 };
 
-// Выполнение задания
 export const completeTask = async (req: Request, res: Response) => {
     const { telegramId, taskName, reward } = req.body;
 
@@ -297,16 +288,18 @@ export const completeTask = async (req: Request, res: Response) => {
     }
 
     try {
-        const user = await User.findOne({ telegramId }) as UserDocument | null;
+        const { data: user } = await supabase.from("users").select("*").eq("telegram_id", telegramId).single();
         if (!user) return res.status(404).json({ error: "User not found" });
 
         updateEnergy(user, new Date());
 
-        if (user.tasksCompleted.includes(taskName)) {
+        if (!user.tasks_completed) user.tasks_completed = [];
+
+        if (user.tasks_completed.includes(taskName)) {
             return res.status(400).json({ error: "Task already completed" });
         }
 
-        user.tasksCompleted.push(taskName);
+        user.tasks_completed.push(taskName);
         user.stones += reward;
 
         await updateUserAndCache(user, userCache);

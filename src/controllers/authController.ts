@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import jwt from "jsonwebtoken";
-import User from "../models/User";
+import { supabase } from "../config/supabase";
+import { generateReferralCode } from "../utils/referralCode";
 import { verifyTelegramInitData } from "../utils/telegramAuth";
 
 export const login = async (req: Request, res: Response) => {
@@ -14,18 +15,20 @@ export const login = async (req: Request, res: Response) => {
     const telegramId = user.id.toString();
     const username = user.username || user.first_name;
 
-    let dbUser = await User.findOne({ telegramId });
+    let { data: dbUser } = await supabase.from("users").select("*").eq("telegram_id", telegramId).single();
     if (!dbUser) {
-        dbUser = new User({
-            telegramId,
+        const newRefCode = generateReferralCode();
+        const { data: newUser } = await supabase.from("users").insert({
+            telegram_id: telegramId,
             username,
             stones: 100, // Начальные камни
             boosts: [
                 { name: "Turbo", count: 3 },
                 { name: "Refills", count: 3 },
             ],
-        });
-        await dbUser.save();
+            referral_code: newRefCode
+        }).select().single();
+        dbUser = newUser;
     }
 
     const token = jwt.sign({ telegramId }, process.env.JWT_SECRET!, { expiresIn: "30d" });

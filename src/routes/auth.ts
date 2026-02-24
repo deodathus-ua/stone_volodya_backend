@@ -1,6 +1,6 @@
 // src/routes/auth.ts
 import { Router, Request, Response } from "express";
-import User from "../models/User";
+import { supabase } from "../config/supabase";
 import { generateReferralCode } from "../utils/referralCode";
 import { generateToken } from "../utils/jwt";
 import { updateUserAndCache } from "../utils/userUtils";
@@ -28,27 +28,34 @@ router.post("/login", async (req: Request, res: Response) => {
     }
 
     const telegramId = telegramUser.id.toString();
-    let user = await User.findOne({ telegramId });
+    let { data: user } = await supabase.from("users").select("*").eq("telegram_id", telegramId).single();
     let referralCode = bodyReferralCode || new URLSearchParams(initData).get("start_param");
 
     if (!user) {
         const newReferralCode = await generateReferralCode();
-        user = new User({
-            telegramId,
+        const { data: newUser } = await supabase.from("users").insert({
+            telegram_id: telegramId,
             username: telegramUser.username || telegramUser.first_name || `Miner_${Math.random().toString(36).substring(7)}`,
             photo_url: telegramUser.photo_url || "",
-            referralCode: newReferralCode,
-            referredBy: referralCode || undefined,
-            isPremium: !!telegramUser.is_premium || telegramUser.allows_write_to_pm === true,
-        });
+            referral_code: newReferralCode,
+            referred_by: referralCode || undefined,
+            is_premium: !!telegramUser.is_premium || telegramUser.allows_write_to_pm === true,
+            stones: 0,
+            energy: 1000,
+            league: "Pebble",
+            last_auto_bot_update: new Date(),
+            last_online: new Date(),
+        }).select().single();
+        user = newUser;
 
         if (referralCode) {
-            const referrer = await User.findOne({ referralCode });
+            const { data: referrer } = await supabase.from("users").select("*").eq("referral_code", referralCode).single();
             if (referrer) {
-                const bonus = user.isPremium ? 10000 : 1000;
-                referrer.invitedFriends.push({ user: user._id, lastReferralStones: 0 });
+                const bonus = user.is_premium ? 10000 : 1000;
+                if (!referrer.invited_friends) referrer.invited_friends = [];
+                referrer.invited_friends.push({ user: user.id, lastReferralStones: 0 });
                 referrer.stones += bonus;
-                referrer.referralBonus = (referrer.referralBonus || 0) + bonus;
+                referrer.referral_bonus = (referrer.referral_bonus || 0) + bonus;
                 user.stones += bonus;
                 await updateUserAndCache(referrer, userCache); // Используем утилиту
             }

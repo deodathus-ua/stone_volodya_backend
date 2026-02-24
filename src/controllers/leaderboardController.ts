@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import User from "../models/User";
+import { supabase } from "../config/supabase";
 import axios from "axios";
 import logger from "../logger";
 
@@ -38,11 +38,16 @@ export const getLeaderboard = async (req: Request, res: Response) => {
     const { league } = req.query;
 
     try {
-        const players = await User.find({ league })
-            .sort({ stones: -1 })
-            .limit(100)
-            .select("telegramId username stones photo_url isPremium")
-            .lean();
+        const { data: players } = await supabase
+            .from("users")
+            .select("telegram_id, username, stones, photo_url, is_premium")
+            .eq("league", league)
+            .order("stones", { ascending: false })
+            .limit(100);
+
+        if (!players) {
+            return res.json([]);
+        }
 
         logger.info(`Fetched ${players.length} players for league: ${league}`);
 
@@ -53,11 +58,11 @@ export const getLeaderboard = async (req: Request, res: Response) => {
                     photoBase64 = await fetchTelegramPhoto(player.photo_url);
                 }
                 return {
-                    telegramId: player.telegramId,
+                    telegramId: player.telegram_id,
                     username: player.username,
                     stones: player.stones,
                     photo_url: photoBase64 || player.photo_url,
-                    isPremium: player.isPremium || false,
+                    isPremium: player.is_premium || false,
                 };
             })
         );

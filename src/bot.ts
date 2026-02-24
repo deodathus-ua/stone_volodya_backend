@@ -2,7 +2,8 @@ import dotenv from "dotenv";
 dotenv.config();
 
 import { Telegraf } from "telegraf";
-import User from "./models/User";
+import { supabase } from "./config/supabase";
+import { IUser, IInvitedFriend } from "./types/database";
 import { generateReferralCode } from "./utils/referralCode";
 import { updateUserAndCache } from "./utils/userUtils";
 import { userCache } from "./server";
@@ -19,7 +20,7 @@ bot.start(async (ctx) => {
     const telegramId = ctx.from.id.toString();
 
     try {
-        let user = await User.findOne({ telegramId });
+        let { data: user } = await supabase.from("users").select("*").eq("telegram_id", telegramId).single();
         const now = new Date();
 
         // Функция для получения актуального photo_url
@@ -40,53 +41,55 @@ bot.start(async (ctx) => {
 
         if (!user) {
             const photoUrl = await getPhotoUrl();
-            user = await User.create({
-                telegramId,
+            const { data: newUser } = await supabase.from("users").insert({
+                telegram_id: telegramId,
                 username: ctx.from.username || ctx.from.first_name || `Miner_${Math.random().toString(36).substring(7)}`,
                 photo_url: photoUrl,
-                referralCode: await generateReferralCode(),
-                referredBy: referralCode || undefined,
-                isPremium: !!ctx.from.is_premium,
+                referral_code: await generateReferralCode(),
+                referred_by: referralCode || undefined,
+                is_premium: !!ctx.from.is_premium,
                 stones: 0,
                 energy: 1000,
                 league: "Pebble",
-                lastAutoBotUpdate: now,
-                lastOnline: now,
-                refillLastUsed: now,
-                boostLastUsed: now,
-            });
+                last_auto_bot_update: now,
+                last_online: now,
+                refill_last_used: now,
+                boost_last_used: now,
+            }).select().single();
+            user = newUser;
 
             if (referralCode) {
-                const referrer = await User.findOne({ referralCode });
+                const { data: referrer } = await supabase.from("users").select("*").eq("referral_code", referralCode).single();
                 if (referrer) {
-                    const bonus = user.isPremium ? 10000 : 1000;
-                    referrer.invitedFriends.push({ user: user._id, lastReferralStones: 0 });
+                    const bonus = user.is_premium ? 10000 : 1000;
+                    if (!referrer.invited_friends) referrer.invited_friends = [];
+                    referrer.invited_friends.push({ user: user.id, lastReferralStones: 0 });
                     referrer.stones += bonus;
-                    referrer.referralBonus = (referrer.referralBonus || 0) + bonus;
-                    await referrer.save();
+                    referrer.referral_bonus = (referrer.referral_bonus || 0) + bonus;
                     await updateUserAndCache(referrer, userCache);
+                    
                     user.stones += bonus;
                 }
             }
         } else {
             // Обновляем данные существующего пользователя
             user.username = ctx.from.username || ctx.from.first_name || user.username;
-            user.isPremium = !!ctx.from.is_premium;
-            user.lastOnline = now;
+            user.is_premium = !!ctx.from.is_premium;
+            user.last_online = now;
             user.photo_url = await getPhotoUrl(); // Обновляем photo_url при каждом входе
 
             // Возобновление бустов раз в сутки
-            if (!user.refillLastUsed || (now.getTime() - user.refillLastUsed.getTime()) >= 24 * 60 * 60 * 1000) {
-                user.refillLastUsed = now;
+            if (!user.refill_last_used || (now.getTime() - new Date(user.refill_last_used).getTime()) >= 24 * 60 * 60 * 1000) {
+                user.refill_last_used = now;
             }
-            if (!user.boostLastUsed || (now.getTime() - user.boostLastUsed.getTime()) >= 24 * 60 * 60 * 1000) {
-                user.boostLastUsed = now;
+            if (!user.boost_last_used || (now.getTime() - new Date(user.boost_last_used).getTime()) >= 24 * 60 * 60 * 1000) {
+                user.boost_last_used = now;
             }
         }
 
         await updateUserAndCache(user, userCache);
 
-        const miniAppUrl = `https://t.me/StoneVolodyaCoinBot/stone_volodya_game?startapp=${user.referralCode}`;
+        const miniAppUrl = `https://t.me/StoneVolodyaCoinBot/stone_volodya_game?startapp=${user.referral_code}`;
 
         // Проверяем наличие изображения в assets и отправляем его с сообщением
         if (fs.existsSync(welcomeImagePath)) {

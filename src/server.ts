@@ -1,5 +1,5 @@
 import express from "express";
-import mongoose from "mongoose";
+import { supabase } from "./config/supabase";
 import { createServer } from "http";
 import { Server } from "socket.io";
 import cors from "cors";
@@ -11,7 +11,7 @@ import leaderboardRoutes from "./routes/leaderboard";
 import airdropRoutes from "./routes/airdrop";
 import referralRoutes from "./routes/referral";
 import earnRoutes from "./routes/earn";
-import User, { IInvitedFriend } from "./models/User";
+import { IUser, IInvitedFriend } from "./types/database";
 import "./bot";
 import { getLeagueByStones, updateUserAndCache, sendUserResponse } from "./utils/userUtils";
 import axios from "axios";
@@ -83,7 +83,7 @@ io.on("connection", (socket) => {
         activeConnections.set(telegramId, socket.id);
         socket.join(telegramId);
 
-        const user = await User.findOne({ telegramId });
+        const { data: user } = await supabase.from("users").select("*").eq("telegram_id", telegramId).single();
         if (user) {
             console.log(`User logged in: ${user.username}`);
             user.photo_url = await fetchTelegramPhoto(telegramId); // Обновляем photo_url при входе
@@ -96,25 +96,26 @@ io.on("connection", (socket) => {
         if (leaderboardCache.has(league)) {
             socket.emit("leaderboard", leaderboardCache.get(league));
         } else {
-            const players = await User.find({ league }).sort({ stones: -1 }).limit(100).select("telegramId username stones");
-            leaderboardCache.set(league, players);
-            socket.emit("leaderboard", players);
+            const { data: players } = await supabase.from("users").select("telegram_id, username, stones").eq("league", league).order("stones", { ascending: false }).limit(100);
+            const mappedPlayers = players?.map(p => ({ telegramId: p.telegram_id, username: p.username, stones: p.stones })) || [];
+            leaderboardCache.set(league, mappedPlayers);
+            socket.emit("leaderboard", mappedPlayers);
         }
     });
 
     socket.on("disconnect", async () => {
         for (const [telegramId, socketId] of activeConnections.entries()) {
             if (socketId === socket.id) {
-                const user = await User.findOne({ telegramId });
+                const { data: user } = await supabase.from("users").select("*").eq("telegram_id", telegramId).single();
                 if (user) {
                     const cachedUser = userCache.get(telegramId);
                     if (cachedUser) {
                         user.stones = cachedUser.stones;
                         user.league = cachedUser.league;
-                        user.lastAutoBotUpdate = cachedUser.lastAutoBotUpdate;
+                        user.last_auto_bot_update = cachedUser.lastAutoBotUpdate;
                     }
-                    user.lastOnline = new Date();
-                    await user.save();
+                    user.last_online = new Date();
+                    await updateUserAndCache(user, userCache);
                 }
                 activeConnections.delete(telegramId);
                 userCache.delete(telegramId);
@@ -128,8 +129,9 @@ io.on("connection", (socket) => {
 setInterval(async () => {
     const leagues = ["Pebble", "Gravel", "Cobblestone", "Boulder", "Quartz", "Granite", "Obsidian", "Marble", "Bedrock"];
     for (const league of leagues) {
-        const players = await User.find({ league }).sort({ stones: -1 }).limit(100).select("telegramId username stones");
-        leaderboardCache.set(league, players);
+        const { data: players } = await supabase.from("users").select("telegram_id, username, stones").eq("league", league).order("stones", { ascending: false }).limit(100);
+        const mappedPlayers = players?.map(p => ({ telegramId: p.telegram_id, username: p.username, stones: p.stones })) || [];
+        leaderboardCache.set(league, mappedPlayers);
     }
     console.log("[Leaderboard Update] Cached leaderboards refreshed.");
 }, 5 * 60 * 1000);
@@ -139,39 +141,55 @@ const updateAllUsers = async () => {
     const now = new Date();
     console.log("[Background Update] Starting user update...");
 
-    const batchSize = 100;
-    const users = await User.find({});
-    for (let i = 0; i < users.length; i += batchSize) {
-        const batch = users.slice(i, i + batchSize);
-        await Promise.all(batch.map(async (user) => {
-            const timeDiff = Math.floor((now.getTime() - user.lastAutoBotUpdate.getTime()) / 1000);
-            if (user.autoStonesPerSecond > 0 && timeDiff > 0) {
-                const boostMultiplier = user.boostActiveUntil && now < user.boostActiveUntil ? 2 : 1;
-                const newStones = Math.floor(user.autoStonesPerSecond * timeDiff * boostMultiplier);
-                user.stones += newStones;
-                user.lastAutoBotUpdate = now;
+    // Pagination/batching in Supabase
+    const batchSize = 1000;
+    let from = 0;
+    let hasMore = true;
 
-                if (user.referredBy) {
-                    const referrer = await User.findOne({ referralCode: user.referredBy });
+    while (hasMore) {
+        const { data: users, error } = await supabase.from("users").select("*").range(from, from + batchSize - 1);
+        if (error || !users || users.length === 0) {
+            hasMore = false;
+            break;
+        }
+        
+        await Promise.all(users.map(async (user: IUser) => {
+            const lastUpdate = user.last_auto_bot_update ? new Date(user.last_auto_bot_update) : now;
+            const timeDiff = Math.floor((now.getTime() - lastUpdate.getTime()) / 1000);
+            if (user.auto_stones_per_second > 0 && timeDiff > 0) {
+                const boostActiveUntil = user.boost_active_until ? new Date(user.boost_active_until) : null;
+                const boostMultiplier = boostActiveUntil && now < boostActiveUntil ? 2 : 1;
+                const newStones = Math.floor(user.auto_stones_per_second * timeDiff * boostMultiplier);
+                user.stones += newStones;
+                user.last_auto_bot_update = now;
+
+                if (user.referred_by) {
+                    const { data: referrer } = await supabase.from("users").select("*").eq("referral_code", user.referred_by).single();
                     if (referrer) {
                         const bonus = Math.floor(newStones * 0.05);
                         referrer.stones += bonus;
-                        referrer.referralBonus = (referrer.referralBonus || 0) + bonus;
+                        referrer.referral_bonus = (referrer.referral_bonus || 0) + bonus;
 
-                        const invitedFriend = referrer.invitedFriends.find((f: IInvitedFriend) => f.user.toString() === user._id.toString());
+                        const invitedFriend = referrer.invited_friends.find((f: IInvitedFriend) => f.user === user.id);
                         if (!invitedFriend) {
-                            referrer.invitedFriends.push({ user: user._id, lastReferralStones: bonus });
+                            referrer.invited_friends.push({ user: user.id, lastReferralStones: bonus });
                         } else {
                             invitedFriend.lastReferralStones += bonus;
                         }
-                        await referrer.save();
-                        io.to(referrer.telegramId).emit("userUpdate", sendUserResponse(referrer));
+                        await updateUserAndCache(referrer, userCache);
+                        io.to(referrer.telegram_id).emit("userUpdate", sendUserResponse(referrer));
                     }
                 }
             }
             user.league = getLeagueByStones(user.stones);
-            await user.save();
+            await updateUserAndCache(user, userCache);
         }));
+
+        if (users.length < batchSize) {
+            hasMore = false;
+        } else {
+            from += batchSize;
+        }
     }
     console.log("[Background Update] All users updated.");
 };
@@ -187,9 +205,6 @@ setInterval(() => {
 
 const start = async () => {
     try {
-        console.log("Attempting to connect to MongoDB:", process.env.MONGO_URI);
-        await mongoose.connect(process.env.MONGO_URI!);
-        console.log("Connected to MongoDB");
         server.listen(process.env.PORT || 3000, () => {
             console.log(`Server running on port ${process.env.PORT || 3000}`);
         });

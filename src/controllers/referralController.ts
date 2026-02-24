@@ -1,4 +1,5 @@
-import User from "../models/User";
+import { supabase } from "../config/supabase";
+import { IInvitedFriend } from "../types/database";
 
 interface Friend {
     telegramId: string;
@@ -9,27 +10,30 @@ interface Friend {
 }
 
 export const getReferralFriends = async (telegramId: string): Promise<{ invitedFriends: Friend[]; totalBonus: number }> => {
-    const user = await User.findOne({ telegramId }).populate<{ invitedFriends: { user: any; lastReferralStones: number }[] }>("invitedFriends.user");
+    const { data: user } = await supabase.from("users").select("*").eq("telegram_id", telegramId).single();
     if (!user) {
         throw new Error("User not found");
     }
 
     const friendsData: Friend[] = [];
-    for (const friendEntry of user.invitedFriends) {
-        if (!friendEntry.user) {
-            continue;
+    if (user.invited_friends && user.invited_friends.length > 0) {
+        const friendIds = user.invited_friends.map((f: IInvitedFriend) => f.user);
+        const { data: friends } = await supabase.from("users").select("*").in("id", friendIds);
+        
+        if (friends) {
+            for (const friend of friends) {
+                friendsData.push({
+                    telegramId: friend.telegram_id,
+                    username: friend.username,
+                    stones: friend.stones,
+                    isPremium: friend.is_premium || false,
+                    photo_url: friend.photo_url || "",
+                });
+            }
         }
-        const friend = friendEntry.user;
-        friendsData.push({
-            telegramId: friend.telegramId,
-            username: friend.username,
-            stones: friend.stones,
-            isPremium: friend.isPremium || false,
-            photo_url: friend.photo_url || "",
-        });
     }
 
-    const totalBonus = user.referralBonus || 0;
+    const totalBonus = user.referral_bonus || 0;
 
     return { invitedFriends: friendsData, totalBonus };
 };
