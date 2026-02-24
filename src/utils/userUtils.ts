@@ -1,6 +1,6 @@
 // src/utils/userUtils.ts
 import { supabase } from "../config/supabase";
-import { IUser } from "../types/database";
+import { IUser, IBoost } from "../types/database";
 import { LEAGUES } from "../config/gameConfig";
 import { UserUpdateFields } from "../types/shared";
 import logger from "../logger";
@@ -10,6 +10,19 @@ export const getLeagueByStones = (stones: number): string => {
         if (stones >= LEAGUES[i].minStones) return LEAGUES[i].name;
     }
     return LEAGUES[0].name;
+};
+
+/**
+ * Пересчитывает производные поля из массива boosts.
+ * Гарантирует синхронизацию между boosts и числовыми полями.
+ * Мутирует объект user.
+ */
+export const recalculateBoostStats = (user: IUser): void => {
+    const boosts = user.boosts || [];
+    user.energy_regen_rate = 1 + (boosts.find((b: IBoost) => b.name === "RechargeSpeed")?.level || 0);
+    user.stones_per_click = 2 + 2 * (boosts.find((b: IBoost) => b.name === "MultiTap")?.level || 0);
+    user.max_energy = 1000 + 500 * (boosts.find((b: IBoost) => b.name === "BatteryPack")?.level || 0);
+    user.auto_stones_per_second = 1 + (boosts.find((b: IBoost) => b.name === "AutoBot")?.level || 0);
 };
 
 /**
@@ -96,6 +109,9 @@ export const updateUserAndCache = async (
 
 
 export const sendUserResponse = (user: IUser) => {
+    // Пересчитываем производные поля из boosts перед отправкой
+    recalculateBoostStats(user);
+
     return {
         telegramId: user.telegram_id,
         username: user.username,

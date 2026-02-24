@@ -3,7 +3,7 @@ import { Server } from "socket.io";
 import { supabase } from "../config/supabase";
 import { LEAGUES, REFERRAL_BONUS_PERCENT } from "../config/gameConfig";
 import { IUser, IInvitedFriend } from "../types/database";
-import { updateUserAndCache, sendUserResponse, getLeagueByStones } from "../utils/userUtils";
+import { updateUserAndCache, sendUserResponse, getLeagueByStones, recalculateBoostStats } from "../utils/userUtils";
 
 export const startBackgroundJobs = (
     io: Server, 
@@ -39,6 +39,8 @@ export const startBackgroundJobs = (
             }
             
             await Promise.allSettled(users.map(async (user: IUser) => {
+                // Пересчитываем boost-статы
+                recalculateBoostStats(user);
                 const lastUpdate = user.last_auto_bot_update ? new Date(user.last_auto_bot_update) : now;
                 const timeDiff = Math.floor((now.getTime() - lastUpdate.getTime()) / 1000);
                 

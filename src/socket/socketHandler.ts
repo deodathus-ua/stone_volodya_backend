@@ -1,7 +1,7 @@
 // src/socket/socketHandler.ts
 import { Server } from "socket.io";
 import { supabase } from "../config/supabase";
-import { updateUserAndCache, sendUserResponse } from "../utils/userUtils";
+import { updateUserAndCache, sendUserResponse, recalculateBoostStats } from "../utils/userUtils";
 import axios from "axios";
 
 // Функция для получения photo_url через Telegram API
@@ -52,10 +52,16 @@ export const initSocketHandlers = (
             const { data: user } = await supabase.from("users").select("*").eq("telegram_id", telegramId).single();
             if (user) {
                 console.log(`User logged in via socket: ${user.username}`);
+                // Пересчитываем boost-статы из массива boosts (фикс рассинхронизации)
+                recalculateBoostStats(user);
                 const photoUrl = await fetchTelegramPhoto(telegramId);
                 await updateUserAndCache(user, userCache, {
                     photo_url: photoUrl,
-                    last_online: new Date()
+                    last_online: new Date(),
+                    energy_regen_rate: user.energy_regen_rate,
+                    stones_per_click: user.stones_per_click,
+                    max_energy: user.max_energy,
+                    auto_stones_per_second: user.auto_stones_per_second
                 });
                 user.photo_url = photoUrl;
                 io.to(telegramId).emit("userUpdate", sendUserResponse(user));

@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import { supabase } from "../config/supabase";
 import { IUser, IBoost, IInvitedFriend } from "../types/database";
 import { io, userCache } from "../server";
-import { updateUserAndCache, sendUserResponse } from "../utils/userUtils";
+import { updateUserAndCache, sendUserResponse, recalculateBoostStats } from "../utils/userUtils";
 import { AuthRequest } from "../types/shared";
 import { recalculateEnergy } from "../services/energyService";
 import { calculateAutoAccrual } from "../services/autoAccrualService";
@@ -48,6 +48,9 @@ export const updateBalance = async (req: AuthRequest, res: Response) => {
     try {
         const { data: user } = await supabase.from("users").select("*").eq("telegram_id", telegramId).single();
         if (!user) return res.status(404).json({ error: "User not found" });
+
+        // Пересчитываем boost-статы из актуального массива boosts
+        recalculateBoostStats(user);
 
         const now = new Date();
 
