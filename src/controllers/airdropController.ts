@@ -5,9 +5,8 @@ import { mnemonicToPrivateKey } from "@ton/crypto";
 import { updateUserAndCache, sendUserResponse } from "../utils/userUtils";
 import { userCache } from "../server";
 
-interface AuthRequest extends Request {
-    user?: { telegramId: string };
-}
+import { AuthRequest } from "../types/shared";
+
 
 const AIRDROP_AMOUNT = 10000;
 const AIRDROP_REQUIRED_PROGRESS = 500_000; // Из AIRDROP_CONFIG.REQUIRED_STONES

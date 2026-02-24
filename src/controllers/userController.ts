@@ -4,9 +4,8 @@ import { supabase } from "../config/supabase";
 import { sendUserResponse, updateUserAndCache } from "../utils/userUtils";
 import { userCache } from "../server";
 
-interface AuthRequest extends Request {
-    user?: { telegramId: string };
-}
+import { AuthRequest } from "../types/shared";
+
 
 export const getProfile = async (req: AuthRequest, res: Response) => {
     const { data: user } = await supabase.from("users").select("*").eq("telegram_id", req.user!.telegramId).single();

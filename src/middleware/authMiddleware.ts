@@ -2,9 +2,8 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 
-interface AuthRequest extends Request {
-    user?: { telegramId: string };
-}
+import { AuthRequest } from "../types/shared";
+
 
 export const authMiddleware = (req: AuthRequest, res: Response, next: NextFunction) => {
     const token = req.headers.authorization?.split(" ")[1];

@@ -3,39 +3,35 @@ import { supabase } from "../config/supabase";
 import { IUser, IBoost, IInvitedFriend } from "../types/database";
 import { io, userCache } from "../server";
 import { updateUserAndCache, sendUserResponse } from "../utils/userUtils";
+import { REFERRAL_BONUS_PERCENT } from "../config/gameConfig";
+import { AuthRequest } from "../types/shared";
 
-export interface Boost {
-    name: string;
-    level: number;
-    count?: number;
-}
 
-export type BoostName = "RechargeSpeed" | "BatteryPack" | "MultiTap" | "AutoBot" | "Refill" | "Boost";
+
+import { BOOST_CONFIG, LEAGUES, BoostName } from "../config/gameConfig";
 
 export const getBoostCost = (boostName: BoostName, level: number): number => {
-    const costs: { [key in BoostName]?: number[] } = {
-        MultiTap: [500, 700, 1000, 1400, 2000, 3400, 4700, 6500, 9000, 13000, 18000],
-        AutoBot: [5000, 9000, 16000, 29000, 52000, 83000, 150000, 270000, 490000, 880000, 1300000],
-        BatteryPack: [750, 1050, 1500, 2100, 3000, 7400, 10000, 14000, 20000, 28000, 38000],
-        RechargeSpeed: [300, 400, 500, 700, 900, 2000, 2600, 3400, 4500, 6000, 13000],
-        Refill: [0],
-        Boost: [0],
-    };
-    return costs[boostName]?.[Math.min(level, costs[boostName].length - 1)] || 0;
+    const config = BOOST_CONFIG[boostName];
+    if (!config) return 0;
+    return config.costs[Math.min(level, config.costs.length - 1)] || 0;
 };
 
 export const getBoostBonus = (boostName: BoostName, level: number): string => {
-    const nextLevel = level + 1;
+    const config = BOOST_CONFIG[boostName];
+    if (!config) return "";
+    const effect = config.calcEffect(level);
+    
     switch (boostName) {
-        case "MultiTap": return `+${2 + 2 * nextLevel} stones/click`;
-        case "AutoBot": return `+${1 + nextLevel} stones/sec`;
-        case "BatteryPack": return `+${1000 + 500 * nextLevel} max energy`;
-        case "RechargeSpeed": return `+${1 + nextLevel} energy/sec`;
-        case "Refill": return "Full energy refill";
-        case "Boost": return "Double taps and auto-taps for 1 minute";
+        case "MultiTap": return `+${effect} stones/click`;
+        case "AutoBot": return `+${effect} stones/sec`;
+        case "BatteryPack": return `+${effect} max energy`;
+        case "RechargeSpeed": return `+${effect} energy/sec`;
+        case "Refill": return effect as string;
+        case "Boost": return effect as string;
         default: return "";
     }
 };
+
 
 const updateEnergy = (user: IUser, now: Date): void => {
     const lastUpdate = user.last_energy_update ? new Date(user.last_energy_update) : now;
@@ -50,7 +46,7 @@ const handleReferralBonus = async (user: IUser, stonesEarned: number): Promise<v
     const { data: referrer } = await supabase.from("users").select("*").eq("referral_code", user.referred_by).single();
     if (!referrer) return;
 
-    const bonus = Math.floor(stonesEarned * 0.05);
+    const bonus = Math.floor(stonesEarned * REFERRAL_BONUS_PERCENT);
     referrer.stones += bonus;
     referrer.referral_bonus = (referrer.referral_bonus || 0) + bonus;
 
@@ -69,7 +65,7 @@ const handleReferralBonus = async (user: IUser, stonesEarned: number): Promise<v
     io.to(referrer.telegram_id).emit("userUpdate", sendUserResponse(referrer));
 };
 
-export const updateBalance = async (req: Request, res: Response) => {
+export const updateBalance = async (req: AuthRequest, res: Response) => {
     const { telegramId, stones, energy, isAutobot = false } = req.body;
 
     if (!telegramId || typeof telegramId !== "string") {

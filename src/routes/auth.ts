@@ -5,6 +5,8 @@ import { generateReferralCode } from "../utils/referralCode";
 import { generateToken } from "../utils/jwt";
 import { updateUserAndCache } from "../utils/userUtils";
 import { userCache } from "../server";
+import { REFERRAL_SIGNUP_BONUS } from "../config/gameConfig";
+
 
 const router = Router();
 
@@ -51,7 +53,7 @@ router.post("/login", async (req: Request, res: Response) => {
         if (referralCode) {
             const { data: referrer } = await supabase.from("users").select("*").eq("referral_code", referralCode).single();
             if (referrer) {
-                const bonus = user.is_premium ? 10000 : 1000;
+                const bonus = user.is_premium ? REFERRAL_SIGNUP_BONUS.premium : REFERRAL_SIGNUP_BONUS.regular;
                 if (!referrer.invited_friends) referrer.invited_friends = [];
                 referrer.invited_friends.push({ user: user.id, lastReferralStones: 0 });
                 referrer.stones += bonus;

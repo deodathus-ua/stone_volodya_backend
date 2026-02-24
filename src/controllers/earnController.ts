@@ -4,21 +4,15 @@ import { IUser } from "../types/database";
 import { userCache } from "../server";
 import { updateUserAndCache, sendUserResponse } from "../utils/userUtils";
 
-// Список доступных задач (можно вынести в отдельный конфиг)
-const availableTasks: { [key: string]: number } = {
-    "join_telegram": 1000,
-    "follow_twitter": 1000,
-    "vote_coinmarketcap": 1200,
-    "join_reddit": 1000,
-    "share_tiktok": 1000,
-};
+import { EARN_TASKS } from "../config/gameConfig";
+
 
 export const completeTask = async (req: Request, res: Response) => {
     const { telegramId, taskName } = req.body;
 
     if (!telegramId) return res.status(400).json({ error: "telegramId is required" });
     if (!taskName) return res.status(400).json({ error: "taskName is required" });
-    if (!availableTasks[taskName]) return res.status(400).json({ error: "Invalid task name" });
+    if (!EARN_TASKS[taskName]) return res.status(400).json({ error: "Invalid task name" });
 
     try {
         const { data: user } = await supabase.from("users").select("*").eq("telegram_id", telegramId).single();
@@ -39,7 +33,7 @@ export const completeTask = async (req: Request, res: Response) => {
         user.last_energy_update = now;
 
         // Начисление награды и отметка задачи
-        const reward = availableTasks[taskName];
+        const reward = EARN_TASKS[taskName];
         user.stones += reward;
         user.tasks_completed.push(taskName);
 

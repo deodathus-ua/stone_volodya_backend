@@ -1,17 +1,15 @@
 import { supabase } from "../config/supabase";
 import { IUser } from "../types/database";
 
+import { LEAGUES } from "../config/gameConfig";
+
 export const getLeagueByStones = (stones: number): string => {
-    if (stones >= 100_000_000) return "Bedrock";
-    if (stones >= 50_000_000) return "Marble";
-    if (stones >= 10_000_000) return "Obsidian";
-    if (stones >= 1_000_000) return "Granite";
-    if (stones >= 500_000) return "Quartz";
-    if (stones >= 100_000) return "Boulder";
-    if (stones >= 50_000) return "Cobblestone";
-    if (stones >= 5_000) return "Gravel";
-    return "Pebble";
+    for (let i = LEAGUES.length - 1; i >= 0; i--) {
+        if (stones >= LEAGUES[i].minStones) return LEAGUES[i].name;
+    }
+    return LEAGUES[0].name;
 };
+
 
 export const updateUserAndCache = async (
     user: IUser,

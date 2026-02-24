@@ -15,6 +15,7 @@ import { IUser, IInvitedFriend } from "./types/database";
 import "./bot";
 import { getLeagueByStones, updateUserAndCache, sendUserResponse } from "./utils/userUtils";
 import axios from "axios";
+import { REFERRAL_BONUS_PERCENT } from "./config/gameConfig";
 
 dotenv.config();
 
@@ -125,9 +126,11 @@ io.on("connection", (socket) => {
     });
 });
 
+import { LEAGUES } from "./config/gameConfig";
+
 // Обновление лидерборда каждые 5 минут
 setInterval(async () => {
-    const leagues = ["Pebble", "Gravel", "Cobblestone", "Boulder", "Quartz", "Granite", "Obsidian", "Marble", "Bedrock"];
+    const leagues = LEAGUES.map(l => l.name);
     for (const league of leagues) {
         const { data: players } = await supabase.from("users").select("telegram_id, username, stones").eq("league", league).order("stones", { ascending: false }).limit(100);
         const mappedPlayers = players?.map(p => ({ telegramId: p.telegram_id, username: p.username, stones: p.stones })) || [];
@@ -166,7 +169,7 @@ const updateAllUsers = async () => {
                 if (user.referred_by) {
                     const { data: referrer } = await supabase.from("users").select("*").eq("referral_code", user.referred_by).single();
                     if (referrer) {
-                        const bonus = Math.floor(newStones * 0.05);
+                        const bonus = Math.floor(newStones * REFERRAL_BONUS_PERCENT);
                         referrer.stones += bonus;
                         referrer.referral_bonus = (referrer.referral_bonus || 0) + bonus;
 

@@ -9,6 +9,8 @@ import { updateUserAndCache } from "./utils/userUtils";
 import { userCache } from "./server";
 import path from "path";
 import fs from "fs";
+import { REFERRAL_SIGNUP_BONUS } from "./config/gameConfig";
+
 
 const bot = new Telegraf(process.env.TELEGRAM_BOT_TOKEN!);
 
@@ -61,7 +63,7 @@ bot.start(async (ctx) => {
             if (referralCode) {
                 const { data: referrer } = await supabase.from("users").select("*").eq("referral_code", referralCode).single();
                 if (referrer) {
-                    const bonus = user.is_premium ? 10000 : 1000;
+                    const bonus = user.is_premium ? REFERRAL_SIGNUP_BONUS.premium : REFERRAL_SIGNUP_BONUS.regular;
                     if (!referrer.invited_friends) referrer.invited_friends = [];
                     referrer.invited_friends.push({ user: user.id, lastReferralStones: 0 });
                     referrer.stones += bonus;
