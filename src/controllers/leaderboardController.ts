@@ -1,73 +1,46 @@
+// src/controllers/leaderboardController.ts
 import { Request, Response } from "express";
 import { supabase } from "../config/supabase";
-import axios from "axios";
 import logger from "../logger";
 
-const fetchTelegramPhoto = async (photoUrl: string): Promise<string> => {
-    try {
-        if (!photoUrl || typeof photoUrl !== "string") {
-            return "";
-        }
-
-        const botToken = process.env.TELEGRAM_BOT_TOKEN;
-        let filePath = "";
-
-        if (photoUrl.includes(`/file/bot${botToken}/`)) {
-            filePath = photoUrl.split(`/file/bot${botToken}/`)[1];
-        } else if (photoUrl.includes("/file/")) {
-            filePath = photoUrl.split("/file/")[1];
-        } else {
-            return photoUrl;
-        }
-
-        if (!filePath) {
-            return "";
-        }
-
-        const telegramApiUrl = `https://api.telegram.org/file/bot${botToken}/${filePath}`;
-
-        const response = await axios.get(telegramApiUrl, { responseType: "arraybuffer" });
-        const base64Image = Buffer.from(response.data, "binary").toString("base64");
-        return `data:image/jpeg;base64,${base64Image}`;
-    } catch (error) {
-        return "";
-    }
-};
-
+/**
+ * Возвращает лидерборд для указанной лиги.
+ * Оптимизировано: убрана тяжелая конвертация фото в Base64 на сервере.
+ */
 export const getLeaderboard = async (req: Request, res: Response) => {
     const { league } = req.query;
 
+    if (!league) {
+        return res.status(400).json({ error: "League is required" });
+    }
+
     try {
-        const { data: players } = await supabase
+        // Оптимизация: выбор только необходимых полей
+        const { data: players, error } = await supabase
             .from("users")
             .select("telegram_id, username, stones, photo_url, is_premium")
             .eq("league", league)
             .order("stones", { ascending: false })
             .limit(100);
 
+        if (error) throw error;
+
         if (!players) {
             return res.json([]);
         }
 
-        logger.info(`Fetched ${players.length} players for league: ${league}`);
+        // logger.info(`Fetched ${players.length} players for league: ${league}`);
 
-        const playersWithPhotos = await Promise.all(
-            players.map(async (player) => {
-                let photoBase64 = "";
-                if (player.photo_url) {
-                    photoBase64 = await fetchTelegramPhoto(player.photo_url);
-                }
-                return {
-                    telegramId: player.telegram_id,
-                    username: player.username,
-                    stones: player.stones,
-                    photo_url: photoBase64 || player.photo_url,
-                    isPremium: player.is_premium || false,
-                };
-            })
-        );
+        // Маппим результат без тяжелой обработки фото
+        const result = players.map((player) => ({
+            telegramId: player.telegram_id,
+            username: player.username,
+            stones: player.stones,
+            photoUrl: player.photo_url || "",
+            isPremium: player.is_premium || false,
+        }));
 
-        res.json(playersWithPhotos);
+        res.json(result);
     } catch (error) {
         logger.error(`Error in getLeaderboard: ${error instanceof Error ? error.message : String(error)}`);
         res.status(500).json({ message: "Error fetching leaderboard" });

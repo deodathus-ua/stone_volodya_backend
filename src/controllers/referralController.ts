@@ -1,3 +1,4 @@
+// src/controllers/referralController.ts
 import { supabase } from "../config/supabase";
 import { IInvitedFriend } from "../types/database";
 
@@ -6,19 +7,34 @@ interface Friend {
     username: string;
     stones: number;
     isPremium: boolean;
-    photo_url: string;
+    photoUrl: string;
 }
 
+/**
+ * Получает список друзей, приглашенных пользователем.
+ * Оптимизировано: выбор только необходимых полей вместо select("*").
+ */
 export const getReferralFriends = async (telegramId: string): Promise<{ invitedFriends: Friend[]; totalBonus: number }> => {
-    const { data: user } = await supabase.from("users").select("*").eq("telegram_id", telegramId).single();
-    if (!user) {
+    // Выбираем только нужные поля для текущего юзера
+    const { data: user, error } = await supabase
+        .from("users")
+        .select("id, invited_friends, referral_bonus")
+        .eq("telegram_id", telegramId)
+        .single();
+
+    if (error || !user) {
         throw new Error("User not found");
     }
 
     const friendsData: Friend[] = [];
     if (user.invited_friends && user.invited_friends.length > 0) {
         const friendIds = user.invited_friends.map((f: IInvitedFriend) => f.user);
-        const { data: friends } = await supabase.from("users").select("*").in("id", friendIds);
+        
+        // Оптимизация: запрос друзей только с нужными полями
+        const { data: friends } = await supabase
+            .from("users")
+            .select("telegram_id, username, stones, is_premium, photo_url")
+            .in("id", friendIds);
         
         if (friends) {
             for (const friend of friends) {
@@ -27,7 +43,7 @@ export const getReferralFriends = async (telegramId: string): Promise<{ invitedF
                     username: friend.username,
                     stones: friend.stones,
                     isPremium: friend.is_premium || false,
-                    photo_url: friend.photo_url || "",
+                    photoUrl: friend.photo_url || "",
                 });
             }
         }

@@ -3,8 +3,11 @@ import { supabase } from "../config/supabase";
 import { IUser, IBoost, IInvitedFriend } from "../types/database";
 import { io, userCache } from "../server";
 import { updateUserAndCache, sendUserResponse } from "../utils/userUtils";
-import { REFERRAL_BONUS_PERCENT } from "../config/gameConfig";
 import { AuthRequest } from "../types/shared";
+import { recalculateEnergy } from "../services/energyService";
+import { calculateAutoAccrual } from "../services/autoAccrualService";
+import { addReferralEarningBonus } from "../services/referralService";
+
 
 
 
@@ -34,109 +37,92 @@ export const getBoostBonus = (boostName: BoostName, level: number): string => {
 };
 
 
-const updateEnergy = (user: IUser, now: Date): void => {
-    const lastUpdate = user.last_energy_update ? new Date(user.last_energy_update) : now;
-    const timeDiff = Math.floor((now.getTime() - lastUpdate.getTime()) / 1000);
-    user.energy = Math.min(user.max_energy, user.energy + timeDiff * user.energy_regen_rate);
-    user.last_energy_update = now;
-};
 
-const handleReferralBonus = async (user: IUser, stonesEarned: number): Promise<void> => {
-    if (!user.referred_by) return;
-
-    const { data: referrer } = await supabase.from("users").select("*").eq("referral_code", user.referred_by).single();
-    if (!referrer) return;
-
-    const bonus = Math.floor(stonesEarned * REFERRAL_BONUS_PERCENT);
-    referrer.stones += bonus;
-    referrer.referral_bonus = (referrer.referral_bonus || 0) + bonus;
-
-    if (!referrer.invited_friends) referrer.invited_friends = [];
-
-    const invitedFriend = referrer.invited_friends.find(
-        (f: IInvitedFriend) => f.user === user.id
-    );
-    if (!invitedFriend) {
-        referrer.invited_friends.push({ user: user.id, lastReferralStones: bonus });
-    } else {
-        invitedFriend.lastReferralStones += bonus;
-    }
-
-    await updateUserAndCache(referrer, userCache);
-    io.to(referrer.telegram_id).emit("userUpdate", sendUserResponse(referrer));
-};
 
 export const updateBalance = async (req: AuthRequest, res: Response) => {
     const telegramId = req.user!.telegramId;
     const { stones, energy, isAutobot = false } = req.body;
 
-
-    if (!telegramId || typeof telegramId !== "string") {
-        return res.status(400).json({ error: "Valid telegramId is required" });
-    }
+    if (!telegramId) return res.status(400).json({ error: "telegramId is required" });
 
     try {
         const { data: user } = await supabase.from("users").select("*").eq("telegram_id", telegramId).single();
         if (!user) return res.status(404).json({ error: "User not found" });
 
-        const cachedUser = userCache.get(telegramId) || {
-            stones: user.stones,
-            autoStonesPerSecond: user.auto_stones_per_second,
-            lastAutoBotUpdate: user.last_auto_bot_update ? new Date(user.last_auto_bot_update) : new Date(),
-            league: user.league,
-        };
         const now = new Date();
 
-        const boostActiveUntil = user.boost_active_until ? new Date(user.boost_active_until) : null;
-        const boostMultiplier = boostActiveUntil && now < boostActiveUntil ? 2 : 1;
-
+        // Anti-cheat: check click speed
         if (!isAutobot && user.last_click_time) {
             const timeSinceLastClick = (now.getTime() - new Date(user.last_click_time).getTime()) / 1000;
             if (timeSinceLastClick < 0.2) {
                 return res.status(400).json({ error: "Clicking too fast!" });
             }
         }
-        user.last_click_time = now;
 
-        updateEnergy(user, now);
+        // 1. Recalculate Energy (Service)
+        recalculateEnergy(user, now);
 
-        if (user.auto_stones_per_second > 0) {
-            const lastAutoUpdate = user.last_auto_bot_update ? new Date(user.last_auto_bot_update) : now;
-            const timeDiff = Math.floor((now.getTime() - lastAutoUpdate.getTime()) / 1000);
-            if (timeDiff > 0) {
-                const stonesEarned = Math.floor(user.auto_stones_per_second * timeDiff * boostMultiplier);
-                cachedUser.stones += stonesEarned;
-                await handleReferralBonus(user, stonesEarned);
-                user.last_auto_bot_update = now;
+        // 2. Handle Auto-Bot Accrual (Service)
+        const { stonesEarned: autoStones, boostMultiplier } = calculateAutoAccrual(user, now);
+        let totalStonesGained = autoStones;
+
+        if (autoStones > 0) {
+            user.stones += autoStones;
+            user.last_auto_bot_update = now;
+            const referrer = await addReferralEarningBonus(user, autoStones);
+            if (referrer) {
+                await updateUserAndCache(referrer, userCache);
+                io.to(referrer.telegram_id).emit("userUpdate", sendUserResponse(referrer));
             }
         }
 
+        // 3. Handle Clicks / Rewards
         if (typeof stones === "number" && stones > 0) {
-            const stonesEarned = stones * boostMultiplier;
+            const clickReward = stones * boostMultiplier;
+            
             if (isAutobot) {
-                cachedUser.stones += stonesEarned;
+                user.stones += clickReward;
+                totalStonesGained += clickReward;
             } else {
-                const energyCostPerClick = Math.ceil(Math.pow(user.stones_per_click, 1.2) / 10);
-                if (user.energy < energyCostPerClick) {
-                    return res.status(400).json({ error: `Not enough energy, required: ${energyCostPerClick}` });
+                const energyCost = Math.ceil(Math.pow(user.stones_per_click, 1.2) / 10);
+                if (user.energy < energyCost) {
+                    return res.status(400).json({ error: "Not enough energy" });
                 }
-                cachedUser.stones += stonesEarned;
-                user.energy -= energyCostPerClick;
-                await handleReferralBonus(user, stonesEarned);
+                user.stones += clickReward;
+                user.energy -= energyCost;
+                totalStonesGained += clickReward;
             }
+        }
+
+        // 4. Update Referrer for Clicks if any
+        if (totalStonesGained > autoStones) {
+             const referrer = await addReferralEarningBonus(user, totalStonesGained - autoStones);
+             if (referrer) {
+                 await updateUserAndCache(referrer, userCache);
+                 io.to(referrer.telegram_id).emit("userUpdate", sendUserResponse(referrer));
+             }
         }
 
         if (typeof energy === "number") {
             user.energy = Math.max(0, Math.min(energy, user.max_energy));
         }
 
-        user.stones = cachedUser.stones;
-        await updateUserAndCache(user, userCache);
+        user.last_click_time = now;
+        
+        // Use Partial Update for performance and stability
+        await updateUserAndCache(user, userCache, {
+            stones: user.stones,
+            energy: user.energy,
+            last_auto_bot_update: user.last_auto_bot_update,
+            last_energy_update: user.last_energy_update,
+            last_click_time: user.last_click_time
+        });
+
         const response = sendUserResponse(user);
         res.json(response);
         io.to(telegramId).emit("userUpdate", response);
     } catch (error) {
-        console.error("[updateBalance] Error:", error instanceof Error ? error.message : error);
+        console.error("[updateBalance] Error:", error);
         res.status(500).json({ error: "Internal server error" });
     }
 };
@@ -261,7 +247,7 @@ export const buySkin = async (req: AuthRequest, res: Response) => {
         const { data: user } = await supabase.from("users").select("*").eq("telegram_id", telegramId).single();
         if (!user) return res.status(404).json({ error: "User not found" });
 
-        updateEnergy(user, new Date());
+        recalculateEnergy(user, new Date());
 
         if (!user.skins) user.skins = [];
 
@@ -298,7 +284,7 @@ export const completeTask = async (req: AuthRequest, res: Response) => {
         const { data: user } = await supabase.from("users").select("*").eq("telegram_id", telegramId).single();
         if (!user) return res.status(404).json({ error: "User not found" });
 
-        updateEnergy(user, new Date());
+        recalculateEnergy(user, new Date());
 
         if (!user.tasks_completed) user.tasks_completed = [];
 
