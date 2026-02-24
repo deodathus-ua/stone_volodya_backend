@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { supabase } from "../config/supabase";
 import { TonClient, WalletContractV4, internal, JettonMaster, JettonWallet, Address, toNano, beginCell } from "@ton/ton";
-import { mnemonicToPrivateKey } from "ton-crypto";
+import { mnemonicToPrivateKey } from "@ton/crypto";
 import { updateUserAndCache, sendUserResponse } from "../utils/userUtils";
 import { userCache } from "../server";
 
