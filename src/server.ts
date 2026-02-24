@@ -4,6 +4,7 @@ import { createServer } from "http";
 import { Server } from "socket.io";
 import cors from "cors";
 import dotenv from "dotenv";
+import logger from "./logger";
 
 import authRoutes from "./routes/auth";
 import userRoutes from "./routes/user";
@@ -60,12 +61,12 @@ startBackgroundJobs(io, userCache, leaderboardCache);
 
 // Online log
 setInterval(() => {
-    console.log(`[Status] Online users: ${activeConnections.size}`);
+    logger.info(`[Status] Online users: ${activeConnections.size}`);
 }, 30 * 60 * 1000);
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+    logger.info(`Server running on port ${PORT}`);
 });
 
 export default server;

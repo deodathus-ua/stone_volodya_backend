@@ -3,6 +3,7 @@ import { supabase } from "../config/supabase";
 import { IUser } from "../types/database";
 import { LEAGUES } from "../config/gameConfig";
 import { UserUpdateFields } from "../types/shared";
+import logger from "../logger";
 
 export const getLeagueByStones = (stones: number): string => {
     for (let i = LEAGUES.length - 1; i >= 0; i--) {
@@ -73,7 +74,7 @@ export const updateUserAndCache = async (
         .eq("telegram_id", user.telegram_id);
         
     if (error) {
-        console.error(`[updateUserAndCache] Error updating user ${user.telegram_id} in Supabase:`, error);
+        logger.error(`[updateUserAndCache] Error updating user ${user.telegram_id} in Supabase: ${error.message}`);
     }
 
     // 3. Обновляем кэш
@@ -86,6 +87,7 @@ export const updateUserAndCache = async (
 
     return user;
 };
+
 
 export const sendUserResponse = (user: IUser) => {
     return {

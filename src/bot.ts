@@ -9,6 +9,7 @@ import { userCache } from "./server";
 import { registerNewUser } from "./services/userRegistrationService";
 import path from "path";
 import fs from "fs";
+import logger from "./logger";
 
 const bot = new Telegraf(process.env.TELEGRAM_BOT_TOKEN!);
 const welcomeImagePath = path.join(__dirname, "../assets/welcome.jpg");
@@ -31,7 +32,7 @@ bot.start(async (ctx) => {
                 }
                 return "";
             } catch (error) {
-                console.error("[bot] Error fetching user profile photos:", error);
+                logger.error("[bot] Error fetching user profile photos:", error);
                 return "";
             }
         };
@@ -75,12 +76,38 @@ bot.start(async (ctx) => {
             await ctx.reply(welcomeText, { reply_markup: keyboard });
         }
     } catch (error) {
-        console.error("[bot] Error processing /start:", error);
+        logger.error("[bot] Error processing /start:", error);
         await ctx.reply("Something went wrong in Stone World. Try again!");
     }
 });
 
-bot.launch();
-console.log("Telegram bot is running...");
+// Функция для безопасного запуска бота
+const launchBot = async () => {
+    try {
+        await bot.launch();
+        logger.info("Telegram bot is running...");
+    } catch (error: any) {
+        if (error.response && error.response.error_code === 409) {
+            logger.warn("Telegram bot conflict: Another instance is running. Retrying in 10 seconds...");
+            setTimeout(launchBot, 10000);
+        } else {
+            logger.error("[bot] Failed to launch:", error);
+            // Пытаемся перезапустить через 30 секунд при других ошибках
+            setTimeout(launchBot, 30000);
+        }
+    }
+};
+
+launchBot();
+
+// Graceful shutdown
+process.once('SIGINT', () => {
+    logger.info("SIGINT received. Stopping bot...");
+    bot.stop('SIGINT');
+});
+process.once('SIGTERM', () => {
+    logger.info("SIGTERM received. Stopping bot...");
+    bot.stop('SIGTERM');
+});
 
 export default bot;
