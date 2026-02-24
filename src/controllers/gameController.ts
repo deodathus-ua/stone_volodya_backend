@@ -8,7 +8,8 @@ import { AuthRequest } from "../types/shared";
 
 
 
-import { BOOST_CONFIG, LEAGUES, BoostName } from "../config/gameConfig";
+import { BOOST_CONFIG, LEAGUES, BoostName, EARN_TASKS } from "../config/gameConfig";
+
 
 export const getBoostCost = (boostName: BoostName, level: number): number => {
     const config = BOOST_CONFIG[boostName];
@@ -66,7 +67,9 @@ const handleReferralBonus = async (user: IUser, stonesEarned: number): Promise<v
 };
 
 export const updateBalance = async (req: AuthRequest, res: Response) => {
-    const { telegramId, stones, energy, isAutobot = false } = req.body;
+    const telegramId = req.user!.telegramId;
+    const { stones, energy, isAutobot = false } = req.body;
+
 
     if (!telegramId || typeof telegramId !== "string") {
         return res.status(400).json({ error: "Valid telegramId is required" });
@@ -138,8 +141,10 @@ export const updateBalance = async (req: AuthRequest, res: Response) => {
     }
 };
 
-export const applyBoost = async (req: Request, res: Response) => {
-    const { telegramId, boostName } = req.body;
+export const applyBoost = async (req: AuthRequest, res: Response) => {
+    const telegramId = req.user!.telegramId;
+    const { boostName } = req.body;
+
 
     if (!telegramId || !boostName || !Object.values(["RechargeSpeed", "BatteryPack", "MultiTap", "AutoBot"]).includes(boostName)) {
         return res.status(400).json({ error: "Valid telegramId and boostName required" });
@@ -185,8 +190,9 @@ export const applyBoost = async (req: Request, res: Response) => {
     }
 };
 
-export const useRefill = async (req: Request, res: Response) => {
-    const { telegramId } = req.body;
+export const useRefill = async (req: AuthRequest, res: Response) => {
+    const telegramId = req.user!.telegramId;
+
 
     if (!telegramId) return res.status(400).json({ error: "telegramId required" });
 
@@ -213,8 +219,9 @@ export const useRefill = async (req: Request, res: Response) => {
     }
 };
 
-export const useBoost = async (req: Request, res: Response) => {
-    const { telegramId } = req.body;
+export const useBoost = async (req: AuthRequest, res: Response) => {
+    const telegramId = req.user!.telegramId;
+
 
     if (!telegramId) return res.status(400).json({ error: "telegramId required" });
 
@@ -241,8 +248,10 @@ export const useBoost = async (req: Request, res: Response) => {
     }
 };
 
-export const buySkin = async (req: Request, res: Response) => {
-    const { telegramId, skinName } = req.body;
+export const buySkin = async (req: AuthRequest, res: Response) => {
+    const telegramId = req.user!.telegramId;
+    const { skinName } = req.body;
+
 
     if (!telegramId || !skinName) {
         return res.status(400).json({ error: "telegramId and skinName are required" });
@@ -276,8 +285,10 @@ export const buySkin = async (req: Request, res: Response) => {
     }
 };
 
-export const completeTask = async (req: Request, res: Response) => {
-    const { telegramId, taskName, reward } = req.body;
+export const completeTask = async (req: AuthRequest, res: Response) => {
+    const telegramId = req.user!.telegramId;
+    const { taskName, reward } = req.body;
+
 
     if (!telegramId || !taskName || typeof reward !== "number" || reward <= 0) {
         return res.status(400).json({ error: "telegramId, taskName, and valid reward are required" });
@@ -291,12 +302,17 @@ export const completeTask = async (req: Request, res: Response) => {
 
         if (!user.tasks_completed) user.tasks_completed = [];
 
+        const configReward = EARN_TASKS[taskName];
+        if (!configReward) return res.status(400).json({ error: "Invalid task name" });
+
         if (user.tasks_completed.includes(taskName)) {
             return res.status(400).json({ error: "Task already completed" });
         }
 
         user.tasks_completed.push(taskName);
-        user.stones += reward;
+        user.stones += configReward;
+
+
 
         await updateUserAndCache(user, userCache);
         res.json(sendUserResponse(user));

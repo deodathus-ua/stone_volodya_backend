@@ -3,12 +3,15 @@ import { supabase } from "../config/supabase";
 import { IUser } from "../types/database";
 import { userCache } from "../server";
 import { updateUserAndCache, sendUserResponse } from "../utils/userUtils";
-
 import { EARN_TASKS } from "../config/gameConfig";
+import { AuthRequest } from "../types/shared";
 
 
-export const completeTask = async (req: Request, res: Response) => {
-    const { telegramId, taskName } = req.body;
+
+export const completeTask = async (req: AuthRequest, res: Response) => {
+    const telegramId = req.user!.telegramId;
+    const { taskName } = req.body;
+
 
     if (!telegramId) return res.status(400).json({ error: "telegramId is required" });
     if (!taskName) return res.status(400).json({ error: "taskName is required" });

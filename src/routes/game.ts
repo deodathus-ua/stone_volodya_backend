@@ -1,7 +1,10 @@
 import { Router } from "express";
 import { updateBalance, applyBoost, buySkin, completeTask, useRefill, useBoost } from "../controllers/gameController";
+import { authMiddleware } from "../middleware/authMiddleware";
 
 const router = Router();
+
+router.use(authMiddleware);
 
 router.post("/update-balance", updateBalance);
 router.post("/apply-boost", applyBoost);

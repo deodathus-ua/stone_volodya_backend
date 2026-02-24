@@ -21,8 +21,10 @@ dotenv.config();
 
 const app = express();
 const server = createServer(app);
+const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(",") || ["*"];
+
 export const io = new Server(server, {
-    cors: { origin: "*" },
+    cors: { origin: allowedOrigins },
     pingTimeout: 60000,
     pingInterval: 25000,
 });
@@ -31,8 +33,9 @@ export const userCache = new Map<string, { stones: number; autoStonesPerSecond: 
 const activeConnections = new Map<string, string>();
 const leaderboardCache = new Map<string, any[]>();
 
-app.use(cors());
+app.use(cors({ origin: allowedOrigins }));
 app.use(express.json());
+
 app.use("/api/auth", authRoutes);
 app.use("/api/user", userRoutes);
 app.use("/api/game", gameRoutes);
