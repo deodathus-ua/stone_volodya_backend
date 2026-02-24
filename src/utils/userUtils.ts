@@ -105,5 +105,6 @@ export const sendUserResponse = (user: IUser) => {
         lastAutoBotUpdate: user.last_auto_bot_update ? new Date(user.last_auto_bot_update).toISOString() : new Date().toISOString(),
         referralBonus: user.referral_bonus || 0,
         airdropProgress: user.airdrop_progress,
+        tonWallet: user.ton_wallet,
     };
 };

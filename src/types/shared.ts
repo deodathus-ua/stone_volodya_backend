@@ -28,6 +28,9 @@ export type UserUpdateFields = Partial<{
     last_click_time: Date | string;
     referral_bonus: number;
     airdrop_progress: number;
+    ton_wallet: string;
+    is_premium: boolean;
+    referral_bonus_claimed: boolean;
     tasks_completed: string[];
     skins: string[];
 }>;
