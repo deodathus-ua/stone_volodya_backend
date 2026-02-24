@@ -52,8 +52,12 @@ export const initSocketHandlers = (
             const { data: user } = await supabase.from("users").select("*").eq("telegram_id", telegramId).single();
             if (user) {
                 console.log(`User logged in via socket: ${user.username}`);
-                user.photo_url = await fetchTelegramPhoto(telegramId);
-                await updateUserAndCache(user, userCache);
+                const photoUrl = await fetchTelegramPhoto(telegramId);
+                await updateUserAndCache(user, userCache, {
+                    photo_url: photoUrl,
+                    last_online: new Date()
+                });
+                user.photo_url = photoUrl;
                 io.to(telegramId).emit("userUpdate", sendUserResponse(user));
             }
         });
@@ -75,13 +79,15 @@ export const initSocketHandlers = (
                     const { data: user } = await supabase.from("users").select("*").eq("telegram_id", telegramId).single();
                     if (user) {
                         const cachedUser = userCache.get(telegramId);
+                        const updates: any = {
+                            last_online: new Date()
+                        };
                         if (cachedUser) {
-                            user.stones = cachedUser.stones;
-                            user.league = cachedUser.league;
-                            user.last_auto_bot_update = cachedUser.lastAutoBotUpdate;
+                            updates.stones = cachedUser.stones;
+                            updates.league = cachedUser.league;
+                            updates.last_auto_bot_update = cachedUser.lastAutoBotUpdate;
                         }
-                        user.last_online = new Date();
-                        await updateUserAndCache(user, userCache);
+                        await updateUserAndCache(user, userCache, updates);
                     }
                     activeConnections.delete(telegramId);
                     userCache.delete(telegramId);

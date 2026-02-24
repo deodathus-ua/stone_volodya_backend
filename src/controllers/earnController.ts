@@ -40,7 +40,12 @@ export const completeTask = async (req: AuthRequest, res: Response) => {
         user.stones += reward;
         user.tasks_completed.push(taskName);
 
-        await updateUserAndCache(user, userCache);
+        await updateUserAndCache(user, userCache, {
+            stones: user.stones,
+            energy: user.energy,
+            last_energy_update: user.last_energy_update,
+            tasks_completed: user.tasks_completed
+        });
         res.json(sendUserResponse(user));
     } catch (error) {
         console.error("[completeTask] Error:", error);

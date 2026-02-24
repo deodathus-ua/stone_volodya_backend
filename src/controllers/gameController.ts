@@ -166,7 +166,14 @@ export const applyBoost = async (req: AuthRequest, res: Response) => {
         user.max_energy = 1000 + 500 * (user.boosts.find((b: IBoost) => b.name === "BatteryPack")?.level || 0);
         user.auto_stones_per_second = 1 + (user.boosts.find((b: IBoost) => b.name === "AutoBot")?.level || 0);
 
-        await updateUserAndCache(user, userCache);
+        await updateUserAndCache(user, userCache, {
+            stones: user.stones,
+            boosts: user.boosts,
+            energy_regen_rate: user.energy_regen_rate,
+            stones_per_click: user.stones_per_click,
+            max_energy: user.max_energy,
+            auto_stones_per_second: user.auto_stones_per_second
+        });
         const response = sendUserResponse(user);
         res.json(response);
         io.to(telegramId).emit("userUpdate", response);
@@ -195,7 +202,10 @@ export const useRefill = async (req: AuthRequest, res: Response) => {
         user.energy = user.max_energy;
         user.refill_last_used = now;
 
-        await updateUserAndCache(user, userCache);
+        await updateUserAndCache(user, userCache, {
+            energy: user.energy,
+            refill_last_used: now
+        });
         const response = sendUserResponse(user);
         res.json(response);
         io.to(telegramId).emit("userUpdate", response);
@@ -224,7 +234,10 @@ export const useBoost = async (req: AuthRequest, res: Response) => {
         user.boost_last_used = now;
         user.boost_active_until = new Date(now.getTime() + 60 * 1000);
 
-        await updateUserAndCache(user, userCache);
+        await updateUserAndCache(user, userCache, {
+            boost_last_used: now,
+            boost_active_until: user.boost_active_until
+        });
         const response = sendUserResponse(user);
         res.json(response);
         io.to(telegramId).emit("userUpdate", response);
@@ -263,7 +276,10 @@ export const buySkin = async (req: AuthRequest, res: Response) => {
         user.stones -= cost;
         user.skins.push(skinName);
 
-        await updateUserAndCache(user, userCache);
+        await updateUserAndCache(user, userCache, {
+            stones: user.stones,
+            skins: user.skins
+        });
         res.json(sendUserResponse(user));
     } catch (error) {
         console.error("[buySkin] Error:", error instanceof Error ? error.message : error);

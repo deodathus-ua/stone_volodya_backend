@@ -33,4 +33,7 @@ export type UserUpdateFields = Partial<{
     referral_bonus_claimed: boolean;
     tasks_completed: string[];
     skins: string[];
+    boosts: import("./database").IBoost[];
+    invited_friends: import("./database").IInvitedFriend[];
+    referred_by: string;
 }>;

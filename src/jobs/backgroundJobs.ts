@@ -63,13 +63,21 @@ export const startBackgroundJobs = (
                             } else {
                                 invitedFriend.lastReferralStones += bonus;
                             }
-                            await updateUserAndCache(referrer, userCache);
+                            await updateUserAndCache(referrer, userCache, {
+                                stones: referrer.stones,
+                                referral_bonus: referrer.referral_bonus,
+                                invited_friends: referrer.invited_friends
+                            });
                             io.to(referrer.telegram_id).emit("userUpdate", sendUserResponse(referrer));
                         }
                     }
                 }
                 user.league = getLeagueByStones(user.stones);
-                await updateUserAndCache(user, userCache);
+                await updateUserAndCache(user, userCache, {
+                    stones: user.stones,
+                    league: user.league,
+                    last_auto_bot_update: user.last_auto_bot_update
+                });
             }));
 
             if (users.length < batchSize) {
