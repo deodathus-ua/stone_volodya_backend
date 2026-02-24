@@ -115,12 +115,12 @@ export const sendUserResponse = (user: IUser) => {
     return {
         telegramId: user.telegram_id,
         username: user.username,
-        stones: user.stones,
-        energy: user.energy,
-        boosts: user.boosts,
-        skins: user.skins,
-        tasksCompleted: user.tasks_completed,
-        league: user.league,
+        stones: user.stones || 0,
+        energy: user.energy || 0,
+        boosts: user.boosts || [],
+        skins: user.skins || [],
+        tasksCompleted: user.tasks_completed || [],
+        league: user.league || "Pebble",
         referralCode: user.referral_code,
         energyRegenRate: user.energy_regen_rate,
         stonesPerClick: user.stones_per_click,
@@ -128,7 +128,7 @@ export const sendUserResponse = (user: IUser) => {
         maxEnergy: user.max_energy,
         lastAutoBotUpdate: user.last_auto_bot_update ? new Date(user.last_auto_bot_update).toISOString() : new Date().toISOString(),
         referralBonus: user.referral_bonus || 0,
-        airdropProgress: user.airdrop_progress,
-        tonWallet: user.ton_wallet,
+        airdropProgress: user.airdrop_progress || 0,
+        tonWallet: user.ton_wallet || "",
     };
 };
