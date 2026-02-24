@@ -26,7 +26,7 @@ export const updateUserAndCache = async (
         .update({
             stones: user.stones,
             energy: user.energy,
-            last_auto_bot_update: user.last_auto_bot_update.toISOString(),
+            last_auto_bot_update: new Date(user.last_auto_bot_update).toISOString(),
             league: user.league,
             skins: user.skins,
             boosts: user.boosts,
@@ -37,13 +37,13 @@ export const updateUserAndCache = async (
             auto_stones_per_second: user.auto_stones_per_second,
             max_energy: user.max_energy,
             referral_bonus: user.referral_bonus,
-            last_energy_update: user.last_energy_update ? user.last_energy_update.toISOString() : undefined,
-            boost_active_until: user.boost_active_until ? user.boost_active_until.toISOString() : undefined,
-            boost_last_used: user.boost_last_used ? user.boost_last_used.toISOString() : undefined,
-            refill_last_used: user.refill_last_used ? user.refill_last_used.toISOString() : undefined,
-            last_click_time: user.last_click_time ? user.last_click_time.toISOString() : undefined,
-            last_online: user.last_online ? user.last_online.toISOString() : undefined,
-            last_login: user.last_login ? user.last_login.toISOString() : undefined,
+            last_energy_update: user.last_energy_update ? new Date(user.last_energy_update).toISOString() : undefined,
+            boost_active_until: user.boost_active_until ? new Date(user.boost_active_until).toISOString() : undefined,
+            boost_last_used: user.boost_last_used ? new Date(user.boost_last_used).toISOString() : undefined,
+            refill_last_used: user.refill_last_used ? new Date(user.refill_last_used).toISOString() : undefined,
+            last_click_time: user.last_click_time ? new Date(user.last_click_time).toISOString() : undefined,
+            last_online: user.last_online ? new Date(user.last_online).toISOString() : undefined,
+            last_login: user.last_login ? new Date(user.last_login).toISOString() : undefined,
         })
         .eq("telegram_id", user.telegram_id);
         
