@@ -3,7 +3,8 @@ import { Server } from "socket.io";
 import { supabase } from "../config/supabase";
 import { LEAGUES, REFERRAL_BONUS_PERCENT } from "../config/gameConfig";
 import { IUser, IInvitedFriend } from "../types/database";
-import { updateUserAndCache, sendUserResponse, getLeagueByStones, recalculateBoostStats } from "../utils/userUtils";
+import { updateUserAndCache, sendUserResponse, recalculateBoostStats, getLeagueByStones } from "../utils/userUtils";
+import logger from "../logger";
 
 export const startBackgroundJobs = (
     io: Server, 
@@ -12,20 +13,20 @@ export const startBackgroundJobs = (
 ) => {
     // Обновление лидерборда каждые 5 минут
     setInterval(async () => {
-        console.log("[Leaderboard Update] Starting...");
+        logger.info("[Leaderboard Update] Starting...");
         const leagues = LEAGUES.map(l => l.name);
         for (const league of leagues) {
             const { data: players } = await supabase.from("users").select("telegram_id, username, stones").eq("league", league).order("stones", { ascending: false }).limit(100);
             const mappedPlayers = players?.map(p => ({ telegramId: p.telegram_id, username: p.username, stones: p.stones })) || [];
             leaderboardCache.set(league, mappedPlayers);
         }
-        console.log("[Leaderboard Update] Cached leaderboards refreshed.");
+        logger.info("[Leaderboard Update] Cached leaderboards refreshed.");
     }, 5 * 60 * 1000);
 
     // Фоновая обработка всех пользователей (раз в 30 минут)
     const updateAllUsers = async () => {
         const now = new Date();
-        console.log("[Background Update] Starting user update...");
+        logger.info("[Background Update] Starting user update batch...");
 
         const batchSize = 1000;
         let from = 0;
@@ -88,7 +89,7 @@ export const startBackgroundJobs = (
                 from += batchSize;
             }
         }
-        console.log("[Background Update] All users updated.");
+        logger.info("[Background Update] All users updated successfully.");
     };
 
     setInterval(updateAllUsers, 30 * 60 * 1000);

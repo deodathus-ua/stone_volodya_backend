@@ -1,4 +1,5 @@
 import nacl from "tweetnacl";
+import logger from "../logger";
 
 interface TelegramUser {
     id: number;
@@ -25,12 +26,12 @@ const MAX_AGE_SECONDS = 86400; // 24 часа
 export const verifyTelegramInitData = async (initData: string, botToken: string): Promise<VerificationResult | null> => {
     // Проверка входных данных
     if (!initData || typeof initData !== "string" || !initData.trim()) {
-        console.log("[verifyTelegramInitData] Invalid or empty initData:", initData);
+        logger.debug("[verifyTelegramInitData] Invalid or empty initData");
         return null;
     }
 
     if (!botToken || typeof botToken !== "string") {
-        console.log("[verifyTelegramInitData] Invalid botToken:", botToken);
+        logger.debug("[verifyTelegramInitData] Invalid botToken");
         return null;
     }
 
@@ -38,13 +39,13 @@ export const verifyTelegramInitData = async (initData: string, botToken: string)
     const params = new URLSearchParams(initData);
     const signature = params.get("signature");
     if (!signature) {
-        console.log("[verifyTelegramInitData] Missing signature in initData:", initData);
+        logger.debug("[verifyTelegramInitData] Missing signature in initData");
         return null;
     }
 
     const authDate = params.get("auth_date");
     if (!authDate) {
-        console.log("[verifyTelegramInitData] Missing auth_date in initData:", initData);
+        logger.debug("[verifyTelegramInitData] Missing auth_date in initData");
         return null;
     }
 
@@ -52,7 +53,7 @@ export const verifyTelegramInitData = async (initData: string, botToken: string)
     const authTimestamp = parseInt(authDate, 10);
     const currentTimestamp = Math.floor(Date.now() / 1000);
     if (currentTimestamp - authTimestamp > MAX_AGE_SECONDS) {
-        console.log("[verifyTelegramInitData] initData too old:", currentTimestamp - authTimestamp);
+        logger.debug("[verifyTelegramInitData] initData too old:", currentTimestamp - authTimestamp);
         return null;
     }
 
@@ -68,7 +69,7 @@ export const verifyTelegramInitData = async (initData: string, botToken: string)
             .map(([key, value]) => `${key}=${value}`),
     ].join("\n");
     if (!dataCheckString) {
-        console.log("[verifyTelegramInitData] Empty dataCheckString:", initData);
+        logger.debug("[verifyTelegramInitData] Empty dataCheckString");
         return null;
     }
 
@@ -79,23 +80,23 @@ export const verifyTelegramInitData = async (initData: string, botToken: string)
         TELEGRAM_PUBLIC_KEY
     );
     if (!isValid) {
-        console.log("[verifyTelegramInitData] Signature verification failed:", signature);
+        logger.debug("[verifyTelegramInitData] Signature verification failed");
         return null;
     }
 
     // Извлечение данных пользователя
     const userString = params.get("user");
     if (!userString) {
-        console.log("[verifyTelegramInitData] Missing user data in initData");
+        logger.debug("[verifyTelegramInitData] Missing user data in initData");
         return null;
     }
 
     try {
         const user: TelegramUser = JSON.parse(decodeURIComponent(userString));
-        console.log("[verifyTelegramInitData] Parsed user:", user); // Для отладки
+        logger.debug("[verifyTelegramInitData] Parsed user:", user); // Для отладки
         return { user };
     } catch (error) {
-        console.log("[verifyTelegramInitData] Failed to parse user data:", error);
+        logger.debug("[verifyTelegramInitData] Failed to parse user data:", error);
         return null;
     }
 };

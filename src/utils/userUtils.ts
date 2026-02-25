@@ -18,11 +18,15 @@ export const getLeagueByStones = (stones: number): string => {
  * Мутирует объект user.
  */
 export const recalculateBoostStats = (user: IUser): void => {
-    const boosts = user.boosts || [];
-    user.energy_regen_rate = 1 + (boosts.find((b: IBoost) => b.name === "RechargeSpeed")?.level || 0);
-    user.stones_per_click = 2 + 2 * (boosts.find((b: IBoost) => b.name === "MultiTap")?.level || 0);
-    user.max_energy = 1000 + 500 * (boosts.find((b: IBoost) => b.name === "BatteryPack")?.level || 0);
-    user.auto_stones_per_second = 1 + (boosts.find((b: IBoost) => b.name === "AutoBot")?.level || 0);
+    try {
+        const boosts = user.boosts || [];
+        user.energy_regen_rate = 1 + (boosts.find((b: IBoost) => b.name === "RechargeSpeed")?.level || 0);
+        user.stones_per_click = 2 + 2 * (boosts.find((b: IBoost) => b.name === "MultiTap")?.level || 0);
+        user.max_energy = 1000 + 500 * (boosts.find((b: IBoost) => b.name === "BatteryPack")?.level || 0);
+        user.auto_stones_per_second = 1 + (boosts.find((b: IBoost) => b.name === "AutoBot")?.level || 0);
+    } catch (e: any) {
+        logger.error(`[recalculateBoostStats] Failed for user ${user?.telegram_id}: ${e.message}`);
+    }
 };
 
 /**
@@ -109,34 +113,39 @@ export const updateUserAndCache = async (
 
 
 export const sendUserResponse = (user: IUser) => {
-    // Пересчитываем производные поля из boosts перед отправкой
-    recalculateBoostStats(user);
+    try {
+        // Пересчитываем производные поля из boosts перед отправкой
+        recalculateBoostStats(user);
 
-    return {
-        telegramId: user.telegram_id,
-        username: user.username,
-        photoUrl: user.photo_url || "",
-        stones: user.stones || 0,
-        energy: user.energy || 0,
-        boosts: user.boosts || [],
-        skins: user.skins || [],
-        tasksCompleted: user.tasks_completed || [],
-        invitedFriends: user.invited_friends || [],
-        league: user.league || "Pebble",
-        referralCode: user.referral_code,
-        energyRegenRate: user.energy_regen_rate,
-        stonesPerClick: user.stones_per_click,
-        autoStonesPerSecond: user.auto_stones_per_second,
-        maxEnergy: user.max_energy,
-        lastAutoBotUpdate: user.last_auto_bot_update ? new Date(user.last_auto_bot_update).toISOString() : new Date().toISOString(),
-        lastClickTime: user.last_click_time ? new Date(user.last_click_time).toISOString() : null,
-        lastOnline: user.last_online ? new Date(user.last_online).toISOString() : null,
-        boostActiveUntil: user.boost_active_until ? new Date(user.boost_active_until).toISOString() : null,
-        boostLastUsed: user.boost_last_used ? new Date(user.boost_last_used).toISOString() : null,
-        refillLastUsed: user.refill_last_used ? new Date(user.refill_last_used).toISOString() : null,
-        isPremium: user.is_premium || false,
-        referralBonus: user.referral_bonus || 0,
-        airdropProgress: user.airdrop_progress || 0,
-        tonWallet: user.ton_wallet || "",
-    };
+        return {
+            telegramId: user.telegram_id,
+            username: user.username,
+            photoUrl: user.photo_url || "",
+            stones: user.stones || 0,
+            energy: user.energy || 0,
+            boosts: user.boosts || [],
+            skins: user.skins || [],
+            tasksCompleted: user.tasks_completed || [],
+            invitedFriends: user.invited_friends || [],
+            league: user.league || "Pebble",
+            referralCode: user.referral_code || "",
+            energyRegenRate: user.energy_regen_rate || 1,
+            stonesPerClick: user.stones_per_click || 1,
+            autoStonesPerSecond: user.auto_stones_per_second || 0,
+            maxEnergy: user.max_energy || 1000,
+            lastAutoBotUpdate: user.last_auto_bot_update ? new Date(user.last_auto_bot_update).toISOString() : new Date().toISOString(),
+            lastClickTime: user.last_click_time ? new Date(user.last_click_time).toISOString() : null,
+            lastOnline: user.last_online ? new Date(user.last_online).toISOString() : null,
+            boostActiveUntil: user.boost_active_until ? new Date(user.boost_active_until).toISOString() : null,
+            boostLastUsed: user.boost_last_used ? new Date(user.boost_last_used).toISOString() : null,
+            refillLastUsed: user.refill_last_used ? new Date(user.refill_last_used).toISOString() : null,
+            isPremium: user.is_premium || false,
+            referralBonus: user.referral_bonus || 0,
+            airdropProgress: user.airdrop_progress || 0,
+            tonWallet: user.ton_wallet || "",
+        };
+    } catch (e: any) {
+        logger.error(`[sendUserResponse] Error parsing user details: ${e.message}`, { userTelegramId: user?.telegram_id });
+        throw e;
+    }
 };

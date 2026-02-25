@@ -5,6 +5,7 @@ import { supabase } from "../config/supabase";
 import { verifyTelegramInitData } from "../utils/telegramAuth";
 import { registerNewUser } from "../services/userRegistrationService";
 import { sendUserResponse } from "../utils/userUtils";
+import logger from "../logger";
 
 /**
  * Логин пользователя через Telegram Init Data.
@@ -15,10 +16,14 @@ export const login = async (req: Request, res: Response) => {
     
     // 1. Верификация данных от Telegram
     const result = await verifyTelegramInitData(initData, process.env.TELEGRAM_BOT_TOKEN!);
-    if (!result) return res.status(401).json({ message: "Invalid Telegram data" });
+    if (!result) {
+        logger.warn(`Failed login attempt: Invalid Telegram data provided.`);
+        return res.status(401).json({ message: "Invalid Telegram data" });
+    }
 
     const { user: tgUser } = result;
     const telegramId = tgUser.id.toString();
+    logger.info(`Login attempt for user: ${tgUser.username || telegramId} (ID: ${telegramId})`);
 
     // 2. Поиск или регистрация пользователя
     let { data: dbUser, error } = await supabase
@@ -35,6 +40,7 @@ export const login = async (req: Request, res: Response) => {
             isPremium: tgUser.is_premium || false,
             referralCode: referralCode || undefined
         });
+        logger.info(`New user registered: ${dbUser.username} (ID: ${telegramId})`);
     }
 
     // 3. Генерация токена

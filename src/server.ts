@@ -67,6 +67,20 @@ setInterval(() => {
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     logger.info(`Server running on port ${PORT}`);
+    logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
+});
+
+// Глобальные обработчики для выявления причин падения без консоли
+process.on("uncaughtException", (error) => {
+    logger.error(`[FATAL] Uncaught Exception: ${error.message}`);
+    logger.error(error.stack || "No stack trace available");
+    // Даем логгеру время записать файл перед выходом
+    setTimeout(() => process.exit(1), 1000);
+});
+
+process.on("unhandledRejection", (reason, promise) => {
+    logger.error(`[FATAL] Unhandled Rejection at: ${promise} reason: ${reason}`);
+    // Здесь мы не выходим, но логируем критическую проблему
 });
 
 export default server;

@@ -3,6 +3,7 @@ import { Server } from "socket.io";
 import { supabase } from "../config/supabase";
 import { updateUserAndCache, sendUserResponse, recalculateBoostStats } from "../utils/userUtils";
 import axios from "axios";
+import logger from "../logger";
 
 // Функция для получения photo_url через Telegram API
 const fetchTelegramPhoto = async (telegramId: string): Promise<string> => {
@@ -23,7 +24,7 @@ const fetchTelegramPhoto = async (telegramId: string): Promise<string> => {
         const filePath = fileResponse.data.result.file_path;
         return `https://api.telegram.org/file/bot${botToken}/${filePath}`;
     } catch (error) {
-        console.error(`[socketHandler] Error fetching photo for ${telegramId}:`, error);
+        logger.error(`[socketHandler] Error fetching photo for ${telegramId}:`, error);
         return "";
     }
 };
@@ -51,7 +52,7 @@ export const initSocketHandlers = (
 
             const { data: user } = await supabase.from("users").select("*").eq("telegram_id", telegramId).single();
             if (user) {
-                console.log(`User logged in via socket: ${user.username}`);
+                logger.info(`User logged in via socket: ${user.username} (ID: ${telegramId})`);
                 // Пересчитываем boost-статы из массива boosts (фикс рассинхронизации)
                 recalculateBoostStats(user);
                 const photoUrl = await fetchTelegramPhoto(telegramId);
