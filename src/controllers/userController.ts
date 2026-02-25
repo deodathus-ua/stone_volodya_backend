@@ -5,6 +5,7 @@ import { sendUserResponse, updateUserAndCache, recalculateBoostStats } from "../
 import { userCache } from "../server";
 import { AuthRequest } from "../types/shared";
 import { IUser } from "../types/database";
+import logger from "../logger";
 
 /**
  * Получает профиль пользователя.
@@ -28,6 +29,7 @@ export const getProfile = async (req: AuthRequest, res: Response) => {
         auto_stones_per_second: user.auto_stones_per_second
     });
 
+    logger.debug(`[getProfile] User profile fetched: ${user.username} (ID: ${req.user?.telegramId})`);
     res.json(sendUserResponse(user));
 };
 

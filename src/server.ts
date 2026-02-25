@@ -42,6 +42,12 @@ const leaderboardCache = new Map<string, any[]>();
 app.use(cors({ origin: allowedOrigins }));
 app.use(express.json());
 
+// Middleware для логирования всех входящих запросов
+app.use((req, res, next) => {
+    logger.debug(`[HTTP] ${req.method} ${req.url}`);
+    next();
+});
+
 // Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/user", userRoutes);

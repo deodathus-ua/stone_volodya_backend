@@ -4,6 +4,7 @@ import { IUser, IBoost, IInvitedFriend } from "../types/database";
 import { io, userCache } from "../server";
 import { updateUserAndCache, sendUserResponse, recalculateBoostStats } from "../utils/userUtils";
 import { AuthRequest } from "../types/shared";
+import logger from "../logger";
 import { recalculateEnergy } from "../services/energyService";
 import { calculateAutoAccrual } from "../services/autoAccrualService";
 import { addReferralEarningBonus } from "../services/referralService";
@@ -138,7 +139,7 @@ export const updateBalance = async (req: AuthRequest, res: Response) => {
         res.json(response);
         io.to(telegramId).emit("userUpdate", response);
     } catch (error) {
-        console.error("[updateBalance] Error:", error);
+        logger.error(`[updateBalance] Critical error for user ${req.user?.telegramId}:`, error);
         res.status(500).json({ error: "Internal server error" });
     }
 };
@@ -194,7 +195,7 @@ export const applyBoost = async (req: AuthRequest, res: Response) => {
         res.json(response);
         io.to(telegramId).emit("userUpdate", response);
     } catch (error) {
-        console.error("[applyBoost] Error:", error instanceof Error ? error.message : error);
+        logger.error(`[applyBoost] Error for user ${req.user?.telegramId}:`, error);
         res.status(500).json({ error: "Internal server error" });
     }
 };
@@ -226,7 +227,7 @@ export const useRefill = async (req: AuthRequest, res: Response) => {
         res.json(response);
         io.to(telegramId).emit("userUpdate", response);
     } catch (error) {
-        console.error("[useRefill] Error:", error instanceof Error ? error.message : error);
+        logger.error(`[useRefill] Error for user ${req.user?.telegramId}:`, error);
         res.status(500).json({ error: "Internal server error" });
     }
 };
@@ -258,7 +259,7 @@ export const useBoost = async (req: AuthRequest, res: Response) => {
         res.json(response);
         io.to(telegramId).emit("userUpdate", response);
     } catch (error) {
-        console.error("[useBoost] Error:", error instanceof Error ? error.message : error);
+        logger.error(`[useBoost] Error for user ${req.user?.telegramId}:`, error);
         res.status(500).json({ error: "Internal server error" });
     }
 };
@@ -298,7 +299,7 @@ export const buySkin = async (req: AuthRequest, res: Response) => {
         });
         res.json(sendUserResponse(user));
     } catch (error) {
-        console.error("[buySkin] Error:", error instanceof Error ? error.message : error);
+        logger.error(`[buySkin] Error for user ${req.user?.telegramId}:`, error);
         res.status(500).json({ error: "Internal server error" });
     }
 };
@@ -335,7 +336,7 @@ export const completeTask = async (req: AuthRequest, res: Response) => {
         await updateUserAndCache(user, userCache);
         res.json(sendUserResponse(user));
     } catch (error) {
-        console.error("[completeTask] Error:", error instanceof Error ? error.message : error);
+        logger.error(`[completeTask] Error for user ${req.user?.telegramId}:`, error);
         res.status(500).json({ error: "Internal server error" });
     }
 };
