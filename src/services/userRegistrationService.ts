@@ -47,6 +47,18 @@ export const registerNewUser = async (params: CreateUserParams): Promise<IUser> 
     }).select().single();
 
     if (error || !newUser) {
+        if (error?.code === '23505') { // Postgres UNIQUE VIOLATION
+            // Race condition: another request just created this user
+            const { data: existingUser, error: fetchError } = await supabase
+                .from("users")
+                .select("*")
+                .eq("telegram_id", params.telegramId)
+                .single();
+            if (fetchError || !existingUser) {
+                throw new Error(`Failed to fetch user after race condition: ${fetchError?.message}`);
+            }
+            return existingUser;
+        }
         throw new Error(`Failed to create user: ${error?.message}`);
     }
 

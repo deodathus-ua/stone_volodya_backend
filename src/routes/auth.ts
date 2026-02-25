@@ -32,7 +32,12 @@ router.post("/login", async (req: Request, res: Response) => {
     let referralCode = bodyReferralCode || new URLSearchParams(initData).get("start_param");
 
     try {
-        let { data: user } = await supabase.from("users").select("*").eq("telegram_id", telegramId).single();
+        let { data: user, error: fetchError } = await supabase.from("users").select("*").eq("telegram_id", telegramId).single();
+
+        if (fetchError && fetchError.code !== 'PGRST116') {
+            logger.error(`[authRoutes] Critical Supabase error fetching user ${telegramId}:`, fetchError);
+            return res.status(503).json({ error: "Service Unavailable" });
+        }
 
         if (!user) {
             // Регистрация через централизованный сервис

@@ -37,7 +37,13 @@ bot.start(async (ctx) => {
             }
         };
 
-        let { data: user } = await supabase.from("users").select("*").eq("telegram_id", telegramId).single();
+        let { data: user, error: fetchError } = await supabase.from("users").select("*").eq("telegram_id", telegramId).single();
+
+        if (fetchError && fetchError.code !== 'PGRST116') {
+            logger.error(`[bot] Critical Supabase error fetching user ${telegramId}:`, fetchError);
+            await ctx.reply("Stone World is currently performing maintenance. Please try again later!");
+            return;
+        }
 
         if (!user) {
             // Централизованная регистрация через сервис
