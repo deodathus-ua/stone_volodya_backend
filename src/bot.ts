@@ -88,23 +88,27 @@ bot.start(async (ctx) => {
 });
 
 // Функция для безопасного запуска бота
-const launchBot = async () => {
+// Функция для безопасного запуска бота (только для ПОЛЛИНГА)
+export const launchBot = async () => {
     try {
         await bot.launch({ dropPendingUpdates: true });
-        logger.info(`Telegram bot is running (PID: ${process.pid})...`);
+        logger.info(`Telegram bot started in POLLING mode (PID: ${process.pid})...`);
     } catch (error: any) {
         if (error.response && error.response.error_code === 409) {
             logger.warn(`Telegram bot conflict (PID: ${process.pid}): Another instance is running. Retrying in 10 seconds...`);
             setTimeout(launchBot, 10000);
         } else {
             logger.error(`[bot] Failed to launch (PID: ${process.pid}):`, error);
-            // Пытаемся перезапустить через 30 секунд при других ошибках
             setTimeout(launchBot, 30000);
         }
     }
 };
 
-launchBot();
+// В продакшене (на Render) будем использовать Webhooks через server.ts
+// В разработке по-прежнему можно использовать Polling
+if (process.env.NODE_ENV !== "production") {
+    launchBot();
+}
 
 // Graceful shutdown
 const handleShutdown = (signal: string) => {

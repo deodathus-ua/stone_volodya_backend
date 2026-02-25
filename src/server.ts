@@ -14,7 +14,7 @@ import airdropRoutes from "./routes/airdrop";
 import referralRoutes from "./routes/referral";
 import earnRoutes from "./routes/earn";
 import { userCache, activeConnections, leaderboardCache } from "./config/cache";
-import "./bot";
+import bot from "./bot";
 
 import { initSocketHandlers } from "./socket/socketHandler";
 import { startBackgroundJobs } from "./jobs/backgroundJobs";
@@ -51,6 +51,13 @@ app.use("/api/airdrop", airdropRoutes);
 app.use("/api/referral", referralRoutes);
 app.use("/api/earn", earnRoutes);
 
+// Telegram Webhook
+if (process.env.NODE_ENV === "production") {
+    const webhookPath = `/api/telegram-webhook/${process.env.TELEGRAM_BOT_TOKEN?.slice(-10)}`;
+    app.use(bot.webhookCallback(webhookPath));
+    logger.info(`[Bot] Webhook middleware enabled at ${webhookPath}`);
+}
+
 app.get("/", (req, res) => {
     res.send("Stone Volodya Server is running!");
 });
@@ -65,9 +72,20 @@ setInterval(() => {
 }, 30 * 60 * 1000);
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
+server.listen(PORT, async () => {
     logger.info(`Server running on port ${PORT} (PID: ${process.pid})`);
     logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
+
+    // Автоматическая установка Webhook в продакшене
+    if (process.env.NODE_ENV === "production" && process.env.RENDER_EXTERNAL_URL) {
+        const webhookUrl = `${process.env.RENDER_EXTERNAL_URL}/api/telegram-webhook/${process.env.TELEGRAM_BOT_TOKEN?.slice(-10)}`;
+        try {
+            await bot.telegram.setWebhook(webhookUrl);
+            logger.info(`[Bot] Webhook successfully set to: ${webhookUrl}`);
+        } catch (error) {
+            logger.error(`[Bot] Failed to set webhook:`, error);
+        }
+    }
 });
 
 // Глобальные обработчики для выявления причин падения без консоли
