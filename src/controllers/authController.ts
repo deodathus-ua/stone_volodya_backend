@@ -4,6 +4,7 @@ import jwt from "jsonwebtoken";
 import { supabase } from "../config/supabase";
 import { verifyTelegramInitData } from "../utils/telegramAuth";
 import { registerNewUser } from "../services/userRegistrationService";
+import { sendUserResponse } from "../utils/userUtils";
 
 /**
  * Логин пользователя через Telegram Init Data.
@@ -22,7 +23,7 @@ export const login = async (req: Request, res: Response) => {
     // 2. Поиск или регистрация пользователя
     let { data: dbUser, error } = await supabase
         .from("users")
-        .select("telegram_id, username, stones")
+        .select("*")
         .eq("telegram_id", telegramId)
         .single();
 
@@ -45,10 +46,6 @@ export const login = async (req: Request, res: Response) => {
     
     res.json({ 
         token, 
-        user: { 
-            telegramId: dbUser.telegram_id, 
-            username: dbUser.username, 
-            stones: dbUser.stones 
-        } 
+        user: sendUserResponse(dbUser) 
     });
 };
