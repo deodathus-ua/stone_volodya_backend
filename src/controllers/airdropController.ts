@@ -6,7 +6,7 @@ import { mnemonicToPrivateKey } from "@ton/crypto";
 import { IUser } from "../types/database";
 import { updateUserAndCache, sendUserResponse } from "../utils/userUtils";
 
-import { userCache } from "../server";
+import { userCache } from "../config/cache";
 import { AuthRequest } from "../types/shared";
 
 const AIRDROP_AMOUNT = 10000;

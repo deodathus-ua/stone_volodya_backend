@@ -2,7 +2,7 @@
 import { Response } from "express";
 import { supabase } from "../config/supabase";
 import { sendUserResponse, updateUserAndCache, recalculateBoostStats } from "../utils/userUtils";
-import { userCache } from "../server";
+import { userCache } from "../config/cache";
 import { AuthRequest } from "../types/shared";
 import { IUser } from "../types/database";
 import logger from "../logger";

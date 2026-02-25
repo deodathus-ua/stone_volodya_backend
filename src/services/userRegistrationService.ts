@@ -4,7 +4,7 @@ import { generateReferralCode } from "../utils/referralCode";
 import { addSignupReferralBonus } from "./referralService";
 import { IUser } from "../types/database";
 import { updateUserAndCache } from "../utils/userUtils";
-import { userCache } from "../server";
+import { userCache } from "../config/cache";
 
 interface CreateUserParams {
     telegramId: string;

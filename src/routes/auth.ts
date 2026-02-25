@@ -3,7 +3,7 @@ import { Router, Request, Response } from "express";
 import { supabase } from "../config/supabase";
 import { generateToken } from "../utils/jwt";
 import { updateUserAndCache, sendUserResponse, recalculateBoostStats } from "../utils/userUtils";
-import { userCache } from "../server";
+import { userCache } from "../config/cache";
 import { registerNewUser } from "../services/userRegistrationService";
 import logger from "../logger";
 

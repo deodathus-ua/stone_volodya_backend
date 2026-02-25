@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { supabase } from "../config/supabase";
 import { IUser } from "../types/database";
-import { userCache } from "../server";
+import { userCache } from "../config/cache";
 import { updateUserAndCache, sendUserResponse } from "../utils/userUtils";
 import { EARN_TASKS } from "../config/gameConfig";
 import { AuthRequest } from "../types/shared";

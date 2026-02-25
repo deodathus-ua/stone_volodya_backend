@@ -1,7 +1,8 @@
 import { Request, Response } from "express";
 import { supabase } from "../config/supabase";
 import { IUser, IBoost, IInvitedFriend } from "../types/database";
-import { io, userCache } from "../server";
+import { io } from "../server";
+import { userCache } from "../config/cache";
 import { updateUserAndCache, sendUserResponse, recalculateBoostStats } from "../utils/userUtils";
 import { AuthRequest } from "../types/shared";
 import logger from "../logger";
