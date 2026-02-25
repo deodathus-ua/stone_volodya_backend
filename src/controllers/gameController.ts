@@ -54,13 +54,13 @@ export const updateBalance = async (req: AuthRequest, res: Response) => {
 
         const now = new Date();
 
-        // Anti-cheat: check click speed
-        if (!isAutobot && user.last_click_time) {
-            const timeSinceLastClick = (now.getTime() - new Date(user.last_click_time).getTime()) / 1000;
-            if (timeSinceLastClick < 0.2) {
-                return res.status(400).json({ error: "Clicking too fast!" });
-            }
-        }
+        // Anti-cheat: check click speed (DISABLED for batched clicks and multi-touch)
+        // if (!isAutobot && user.last_click_time) {
+        //     const timeSinceLastClick = (now.getTime() - new Date(user.last_click_time).getTime()) / 1000;
+        //     if (timeSinceLastClick < 0.2) {
+        //         return res.status(400).json({ error: "Clicking too fast!" });
+        //     }
+        // }
 
         // 1. Recalculate Energy (Service)
         recalculateEnergy(user, now);
@@ -81,19 +81,34 @@ export const updateBalance = async (req: AuthRequest, res: Response) => {
 
         // 3. Handle Clicks / Rewards
         if (typeof stones === "number" && stones > 0) {
-            const clickReward = stones * boostMultiplier;
-            
             if (isAutobot) {
+                const clickReward = stones * boostMultiplier;
                 user.stones += clickReward;
                 totalStonesGained += clickReward;
             } else {
-                const energyCost = Math.ceil(Math.pow(user.stones_per_click, 1.2) / 10);
-                if (user.energy < energyCost) {
-                    return res.status(400).json({ error: "Not enough energy" });
+                // Рассчитываем, сколько кликов пришло в пакете `stones`
+                const clicksRepresented = Math.max(1, Math.ceil(stones / user.stones_per_click));
+                const energyCostPerClick = Math.ceil(Math.pow(user.stones_per_click, 1.2) / 10);
+                const totalEnergyCost = clicksRepresented * energyCostPerClick;
+
+                if (user.energy < totalEnergyCost) {
+                    // Разрешаем частичное восстановление, если прислали больше тапов, чем есть энергии
+                    const allowClicks = Math.floor(user.energy / energyCostPerClick);
+                    if (allowClicks > 0) {
+                        const allowedStones = allowClicks * user.stones_per_click;
+                        const clickReward = allowedStones * boostMultiplier;
+                        user.stones += clickReward;
+                        user.energy -= allowClicks * energyCostPerClick;
+                        totalStonesGained += clickReward;
+                    } else {
+                        return res.status(400).json({ error: "Not enough energy" });
+                    }
+                } else {
+                    const clickReward = stones * boostMultiplier;
+                    user.stones += clickReward;
+                    user.energy -= totalEnergyCost;
+                    totalStonesGained += clickReward;
                 }
-                user.stones += clickReward;
-                user.energy -= energyCost;
-                totalStonesGained += clickReward;
             }
         }
 
