@@ -79,15 +79,17 @@ export const updateBalance = async (req: AuthRequest, res: Response) => {
             }
         }
 
+        const parsedStones = Number(stones) || 0;
+
         // 3. Handle Clicks / Rewards
-        if (typeof stones === "number" && stones > 0) {
+        if (parsedStones > 0) {
             if (isAutobot) {
-                const clickReward = stones * boostMultiplier;
+                const clickReward = parsedStones * boostMultiplier;
                 user.stones += clickReward;
                 totalStonesGained += clickReward;
             } else {
                 // Рассчитываем, сколько кликов пришло в пакете `stones`
-                const clicksRepresented = Math.max(1, Math.ceil(stones / user.stones_per_click));
+                const clicksRepresented = Math.max(1, Math.ceil(parsedStones / user.stones_per_click));
                 const energyCostPerClick = Math.ceil(Math.pow(user.stones_per_click, 1.2) / 10);
                 const totalEnergyCost = clicksRepresented * energyCostPerClick;
 
@@ -100,11 +102,11 @@ export const updateBalance = async (req: AuthRequest, res: Response) => {
                         user.stones += clickReward;
                         user.energy -= allowClicks * energyCostPerClick;
                         totalStonesGained += clickReward;
-                    } else {
-                        return res.status(400).json({ error: "Not enough energy" });
-                    }
+                    } 
+                    // Если энергии не хватает даже на 1 клик, не падаем с ошибкой 400, 
+                    // а просто пропускаем начисление, чтобы не зависал интерфейс.
                 } else {
-                    const clickReward = stones * boostMultiplier;
+                    const clickReward = parsedStones * boostMultiplier;
                     user.stones += clickReward;
                     user.energy -= totalEnergyCost;
                     totalStonesGained += clickReward;
@@ -119,10 +121,6 @@ export const updateBalance = async (req: AuthRequest, res: Response) => {
                  await updateUserAndCache(referrer, userCache);
                  io.to(referrer.telegram_id).emit("userUpdate", sendUserResponse(referrer));
              }
-        }
-
-        if (typeof energy === "number") {
-            user.energy = Math.max(0, Math.min(energy, user.max_energy));
         }
 
         user.last_click_time = now;
