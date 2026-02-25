@@ -13,9 +13,10 @@ const logger = createLogger({
         format.timestamp({ format: "YYYY-MM-DD HH:mm:ss" }),
         format.errors({ stack: true }), // Добавляем стек ошибок
         format.printf(({ timestamp, level, message, stack }) => {
+            const pid = process.pid;
             return stack 
-                ? `${timestamp} [${level.toUpperCase()}] ${message}\n${stack}`
-                : `${timestamp} [${level.toUpperCase()}] ${message}`;
+                ? `${timestamp} [${level.toUpperCase()}] [PID: ${pid}] ${message}\n${stack}`
+                : `${timestamp} [${level.toUpperCase()}] [PID: ${pid}] ${message}`;
         })
     ),
     transports: [

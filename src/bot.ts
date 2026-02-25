@@ -5,7 +5,7 @@ dotenv.config();
 import { Telegraf } from "telegraf";
 import { supabase } from "./config/supabase";
 import { updateUserAndCache } from "./utils/userUtils";
-import { userCache } from "./server";
+import { userCache } from "./config/cache";
 import { registerNewUser } from "./services/userRegistrationService";
 import path from "path";
 import fs from "fs";
@@ -90,14 +90,14 @@ bot.start(async (ctx) => {
 // Функция для безопасного запуска бота
 const launchBot = async () => {
     try {
-        await bot.launch();
-        logger.info("Telegram bot is running...");
+        await bot.launch({ dropPendingUpdates: true });
+        logger.info(`Telegram bot is running (PID: ${process.pid})...`);
     } catch (error: any) {
         if (error.response && error.response.error_code === 409) {
-            logger.warn("Telegram bot conflict: Another instance is running. Retrying in 10 seconds...");
+            logger.warn(`Telegram bot conflict (PID: ${process.pid}): Another instance is running. Retrying in 10 seconds...`);
             setTimeout(launchBot, 10000);
         } else {
-            logger.error("[bot] Failed to launch:", error);
+            logger.error(`[bot] Failed to launch (PID: ${process.pid}):`, error);
             // Пытаемся перезапустить через 30 секунд при других ошибках
             setTimeout(launchBot, 30000);
         }
@@ -107,13 +107,13 @@ const launchBot = async () => {
 launchBot();
 
 // Graceful shutdown
-process.once('SIGINT', () => {
-    logger.info("SIGINT received. Stopping bot...");
-    bot.stop('SIGINT');
-});
-process.once('SIGTERM', () => {
-    logger.info("SIGTERM received. Stopping bot...");
-    bot.stop('SIGTERM');
-});
+const handleShutdown = (signal: string) => {
+    logger.info(`${signal} received. Stopping bot (PID: ${process.pid})...`);
+    bot.stop(signal);
+};
+
+process.once('SIGINT', () => handleShutdown('SIGINT'));
+process.once('SIGTERM', () => handleShutdown('SIGTERM'));
+process.once('SIGUSR2', () => handleShutdown('SIGUSR2')); // nodemon
 
 export default bot;

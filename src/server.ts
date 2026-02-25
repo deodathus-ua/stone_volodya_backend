@@ -13,6 +13,7 @@ import leaderboardRoutes from "./routes/leaderboard";
 import airdropRoutes from "./routes/airdrop";
 import referralRoutes from "./routes/referral";
 import earnRoutes from "./routes/earn";
+import { userCache, activeConnections, leaderboardCache } from "./config/cache";
 import "./bot";
 
 import { initSocketHandlers } from "./socket/socketHandler";
@@ -30,14 +31,7 @@ export const io = new Server(server, {
     pingInterval: 25000,
 });
 
-export const userCache = new Map<string, { 
-    stones: number; 
-    autoStonesPerSecond: number; 
-    lastAutoBotUpdate: Date; 
-    league: string 
-}>();
-const activeConnections = new Map<string, string>();
-const leaderboardCache = new Map<string, any[]>();
+// Caches are now imported from ./config/cache
 
 app.use(cors({ origin: allowedOrigins }));
 app.use(express.json());
@@ -72,7 +66,7 @@ setInterval(() => {
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    logger.info(`Server running on port ${PORT}`);
+    logger.info(`Server running on port ${PORT} (PID: ${process.pid})`);
     logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
 });
 
