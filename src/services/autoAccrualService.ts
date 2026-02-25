@@ -13,19 +13,19 @@ export interface AccrualResult {
  * НЕ мутирует объект user.
  */
 export const calculateAutoAccrual = (user: IUser, now: Date): AccrualResult => {
+    const boostActiveUntil = user.boost_active_until ? new Date(user.boost_active_until) : null;
+    const boostMultiplier = boostActiveUntil && now < boostActiveUntil ? BOOST_MULTIPLIER : 1;
+
     if (user.auto_stones_per_second <= 0) {
-        return { stonesEarned: 0, boostMultiplier: 1, timeDiff: 0 };
+        return { stonesEarned: 0, boostMultiplier, timeDiff: 0 };
     }
 
     const lastUpdate = user.last_auto_bot_update ? new Date(user.last_auto_bot_update) : now;
     const timeDiff = Math.floor((now.getTime() - lastUpdate.getTime()) / 1000);
 
     if (timeDiff <= 0) {
-        return { stonesEarned: 0, boostMultiplier: 1, timeDiff: 0 };
+        return { stonesEarned: 0, boostMultiplier, timeDiff: 0 };
     }
-
-    const boostActiveUntil = user.boost_active_until ? new Date(user.boost_active_until) : null;
-    const boostMultiplier = boostActiveUntil && now < boostActiveUntil ? BOOST_MULTIPLIER : 1;
 
     const stonesEarned = Math.floor(user.auto_stones_per_second * timeDiff * boostMultiplier);
 

@@ -18,22 +18,22 @@ export const BOOST_CONFIG: Record<string, { costs: number[]; maxLevel: number; c
     MultiTap: {
         costs: [500, 700, 1000, 1400, 2000, 3400, 4700, 6500, 9000, 13000, 18000],
         maxLevel: 10,
-        calcEffect: (level: number) => 2 + 2 * (level + 1), // stones/click
+        calcEffect: (level: number) => 2 + 2 * level, // stones/click (Base 2)
     },
     AutoBot: {
         costs: [5000, 9000, 16000, 29000, 52000, 83000, 150000, 270000, 490000, 880000, 1300000],
         maxLevel: 10,
-        calcEffect: (level: number) => 1 + (level + 1), // stones/sec
+        calcEffect: (level: number) => 1 + level, // stones/sec (Base 1)
     },
     BatteryPack: {
         costs: [750, 1050, 1500, 2100, 3000, 7400, 10000, 14000, 20000, 28000, 38000],
         maxLevel: 10,
-        calcEffect: (level: number) => 1000 + 500 * (level + 1), // max energy
+        calcEffect: (level: number) => 1000 + 500 * level, // max energy
     },
     RechargeSpeed: {
         costs: [300, 400, 500, 700, 900, 2000, 2600, 3400, 4500, 6000, 13000],
         maxLevel: 10,
-        calcEffect: (level: number) => 1 + (level + 1), // energy/sec
+        calcEffect: (level: number) => 1 + level, // energy/sec
     },
     Refill: {
         costs: [0],

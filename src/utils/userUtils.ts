@@ -20,10 +20,12 @@ export const getLeagueByStones = (stones: number): string => {
 export const recalculateBoostStats = (user: IUser): void => {
     try {
         const boosts = user.boosts || [];
-        user.energy_regen_rate = 1 + (boosts.find((b: IBoost) => b.name === "RechargeSpeed")?.level || 0);
-        user.stones_per_click = 2 + 2 * (boosts.find((b: IBoost) => b.name === "MultiTap")?.level || 0);
-        user.max_energy = 1000 + 500 * (boosts.find((b: IBoost) => b.name === "BatteryPack")?.level || 0);
-        user.auto_stones_per_second = 1 + (boosts.find((b: IBoost) => b.name === "AutoBot")?.level || 0);
+        const findLevel = (name: string) => boosts.find((b: IBoost) => b.name === name)?.level || 0;
+
+        user.energy_regen_rate = 1 + findLevel("RechargeSpeed");
+        user.stones_per_click = 2 + 2 * findLevel("MultiTap");
+        user.max_energy = 1000 + 500 * findLevel("BatteryPack");
+        user.auto_stones_per_second = 1 + findLevel("AutoBot");
     } catch (e: any) {
         logger.error(`[recalculateBoostStats] Failed for user ${user?.telegram_id}: ${e.message}`);
     }

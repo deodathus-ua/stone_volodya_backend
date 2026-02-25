@@ -82,36 +82,41 @@ export const updateBalance = async (req: AuthRequest, res: Response) => {
         }
 
         const parsedStones = Number(stones) || 0;
+        logger.debug(`[updateBalance] User ${telegramId} sent ${parsedStones} stones (isAutobot: ${isAutobot}). Active Energy: ${user.energy}/${user.max_energy}`);
 
         // 3. Handle Clicks / Rewards
         if (parsedStones > 0) {
             if (isAutobot) {
-                const clickReward = parsedStones * boostMultiplier;
+                const clickReward = Math.floor(parsedStones * boostMultiplier);
                 user.stones += clickReward;
                 totalStonesGained += clickReward;
+                logger.debug(`[updateBalance] Auto-bot reward for ${telegramId}: ${clickReward} stones (Multiplier: ${boostMultiplier})`);
             } else {
                 // Рассчитываем, сколько кликов пришло в пакете `stones`
                 const clicksRepresented = Math.max(1, Math.ceil(parsedStones / user.stones_per_click));
                 const energyCostPerClick = Math.ceil(Math.pow(user.stones_per_click, 1.2) / 10);
                 const totalEnergyCost = clicksRepresented * energyCostPerClick;
 
+                logger.debug(`[updateBalance] Processing clicks for ${telegramId}: ${clicksRepresented} clicks, Cost: ${totalEnergyCost}, Per Click: ${user.stones_per_click}`);
+
                 if (user.energy < totalEnergyCost) {
                     // Разрешаем частичное восстановление, если прислали больше тапов, чем есть энергии
                     const allowClicks = Math.floor(user.energy / energyCostPerClick);
+                    logger.warn(`[updateBalance] Insufficient energy for ${telegramId}. Required: ${totalEnergyCost}, Has: ${user.energy}. Allowing ${allowClicks} clicks.`);
+                    
                     if (allowClicks > 0) {
                         const allowedStones = allowClicks * user.stones_per_click;
-                        const clickReward = allowedStones * boostMultiplier;
+                        const clickReward = Math.floor(allowedStones * boostMultiplier);
                         user.stones += clickReward;
                         user.energy -= allowClicks * energyCostPerClick;
                         totalStonesGained += clickReward;
                     } 
-                    // Если энергии не хватает даже на 1 клик, не падаем с ошибкой 400, 
-                    // а просто пропускаем начисление, чтобы не зависал интерфейс.
                 } else {
-                    const clickReward = parsedStones * boostMultiplier;
+                    const clickReward = Math.floor(parsedStones * boostMultiplier);
                     user.stones += clickReward;
                     user.energy -= totalEnergyCost;
                     totalStonesGained += clickReward;
+                    logger.debug(`[updateBalance] Added ${clickReward} stones to ${telegramId}. Remaining energy: ${user.energy}`);
                 }
             }
         }

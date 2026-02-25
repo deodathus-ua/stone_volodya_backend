@@ -6,7 +6,11 @@ import { IUser } from "../types/database";
  * Мутирует объект user.
  */
 export const recalculateEnergy = (user: IUser, now: Date): void => {
-    const lastUpdate = user.last_energy_update ? new Date(user.last_energy_update) : now;
+    if (!user.last_energy_update) {
+        user.last_energy_update = now;
+        return;
+    }
+    const lastUpdate = new Date(user.last_energy_update);
     const timeDiff = Math.floor((now.getTime() - lastUpdate.getTime()) / 1000);
     
     if (timeDiff > 0) {
