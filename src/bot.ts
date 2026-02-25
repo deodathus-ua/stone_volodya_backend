@@ -106,8 +106,14 @@ export const launchBot = async () => {
 
 // В продакшене (на Render) будем использовать Webhooks через server.ts
 // В разработке по-прежнему можно использовать Polling
-if (process.env.NODE_ENV !== "production") {
+const isProduction = process.env.NODE_ENV === "production" || process.env.RENDER === "true";
+
+logger.debug(`[bot] Environment check: NODE_ENV=${process.env.NODE_ENV}, RENDER=${process.env.RENDER}, isProduction=${isProduction}`);
+
+if (!isProduction) {
     launchBot();
+} else {
+    logger.info(`[bot] Polling disabled (Production environment detected). Webhooks should be used.`);
 }
 
 // Graceful shutdown

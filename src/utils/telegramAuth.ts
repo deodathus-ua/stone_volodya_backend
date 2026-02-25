@@ -1,4 +1,5 @@
 import nacl from "tweetnacl";
+import crypto from "crypto";
 import logger from "../logger";
 
 interface TelegramUser {
@@ -23,80 +24,99 @@ const TELEGRAM_PUBLIC_KEY = Buffer.from(
 const BOT_ID = process.env.BOT_ID || "7930848670";
 const MAX_AGE_SECONDS = 86400; // 24 часа
 
+/**
+ * Верификация через HMAC-SHA256 (Стандартный способ Telegram)
+ */
+const verifyHMAC = (initData: string, botToken: string): TelegramUser | null => {
+    try {
+        const params = new URLSearchParams(initData);
+        const hash = params.get("hash");
+        if (!hash) return null;
+
+        params.delete("hash");
+        params.delete("signature"); // На всякий случай
+
+        const dataCheckString = Array.from(params.entries())
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([key, value]) => `${key}=${value}`)
+            .join("\n");
+
+        const secretKey = crypto.createHmac("sha256", "WebAppData").update(botToken).digest();
+        const calculatedHash = crypto.createHmac("sha256", secretKey).update(dataCheckString).digest("hex");
+
+        if (calculatedHash !== hash) return null;
+
+        const userString = params.get("user");
+        if (!userString) return null;
+
+        return JSON.parse(decodeURIComponent(userString));
+    } catch (e) {
+        return null;
+    }
+};
+
+/**
+ * Верификация через Ed25519 (Новый способ через signature)
+ */
+const verifyEd25519 = (initData: string): TelegramUser | null => {
+    try {
+        const params = new URLSearchParams(initData);
+        const signature = params.get("signature");
+        if (!signature) return null;
+
+        params.delete("hash");
+        params.delete("signature");
+
+        const dataCheckString = [
+            `${BOT_ID}:WebAppData`,
+            ...Array.from(params.entries())
+                .sort()
+                .map(([key, value]) => `${key}=${value}`),
+        ].join("\n");
+
+        const isValid = nacl.sign.detached.verify(
+            Buffer.from(dataCheckString),
+            Buffer.from(signature, "base64url"),
+            TELEGRAM_PUBLIC_KEY
+        );
+
+        if (!isValid) return null;
+
+        const userString = params.get("user");
+        if (!userString) return null;
+
+        return JSON.parse(decodeURIComponent(userString));
+    } catch (e) {
+        return null;
+    }
+};
+
 export const verifyTelegramInitData = async (initData: string, botToken: string): Promise<VerificationResult | null> => {
-    // Проверка входных данных
-    if (!initData || typeof initData !== "string" || !initData.trim()) {
-        logger.debug("[verifyTelegramInitData] Invalid or empty initData");
-        return null;
-    }
+    if (!initData || !botToken) return null;
 
-    if (!botToken || typeof botToken !== "string") {
-        logger.debug("[verifyTelegramInitData] Invalid botToken");
-        return null;
-    }
-
-    // Парсинг параметров из initData
     const params = new URLSearchParams(initData);
-    const signature = params.get("signature");
-    if (!signature) {
-        logger.debug("[verifyTelegramInitData] Missing signature in initData");
-        return null;
-    }
-
     const authDate = params.get("auth_date");
-    if (!authDate) {
-        logger.debug("[verifyTelegramInitData] Missing auth_date in initData");
-        return null;
-    }
+    if (!authDate) return null;
 
-    // Проверка свежести данных
     const authTimestamp = parseInt(authDate, 10);
     const currentTimestamp = Math.floor(Date.now() / 1000);
     if (currentTimestamp - authTimestamp > MAX_AGE_SECONDS) {
-        logger.debug("[verifyTelegramInitData] initData too old:", currentTimestamp - authTimestamp);
+        logger.debug("[verifyTelegramInitData] initData too old");
         return null;
     }
 
-    // Удаляем hash и signature для проверки подписи
-    params.delete("hash");
-    params.delete("signature");
-
-    // Формируем строку для верификации
-    const dataCheckString = [
-        `${BOT_ID}:WebAppData`,
-        ...Array.from(params.entries())
-            .sort()
-            .map(([key, value]) => `${key}=${value}`),
-    ].join("\n");
-    if (!dataCheckString) {
-        logger.debug("[verifyTelegramInitData] Empty dataCheckString");
-        return null;
+    // Пробуем Ed25519 (новый метод)
+    let user = verifyEd25519(initData);
+    
+    // Если не вышло, пробуем HMAC (классический метод)
+    if (!user) {
+        user = verifyHMAC(initData, botToken);
     }
 
-    // Проверка подписи
-    const isValid = nacl.sign.detached.verify(
-        Buffer.from(dataCheckString),
-        Buffer.from(signature, "base64url"),
-        TELEGRAM_PUBLIC_KEY
-    );
-    if (!isValid) {
-        logger.debug("[verifyTelegramInitData] Signature verification failed");
-        return null;
-    }
-
-    // Извлечение данных пользователя
-    const userString = params.get("user");
-    if (!userString) {
-        logger.debug("[verifyTelegramInitData] Missing user data in initData");
-        return null;
-    }
-
-    try {
-        const user: TelegramUser = JSON.parse(decodeURIComponent(userString));
-        logger.debug("[verifyTelegramInitData] Parsed user:", user); // Для отладки
+    if (user) {
         return { user };
-    } catch (error) {
-        logger.debug("[verifyTelegramInitData] Failed to parse user data:", error);
-        return null;
     }
+
+    logger.warn("[verifyTelegramInitData] All verification methods failed");
+    return null;
 };

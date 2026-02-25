@@ -7,26 +7,22 @@ import { userCache } from "../config/cache";
 import { registerNewUser } from "../services/userRegistrationService";
 import logger from "../logger";
 
-const router = Router();
+import { verifyTelegramInitData } from "../utils/telegramAuth";
 
-const parseInitData = (initData: string) => {
-    const params = new URLSearchParams(initData);
-    const userStr = params.get("user");
-    if (!userStr) throw new Error("User data not found in initData");
-    return JSON.parse(decodeURIComponent(userStr));
-};
+const router = Router();
 
 router.post("/login", async (req: Request, res: Response) => {
     const { initData, referralCode: bodyReferralCode } = req.body;
     if (!initData) return res.status(400).json({ error: "initData is required" });
 
-    let telegramUser;
-    try {
-        telegramUser = parseInitData(initData);
-    } catch (error) {
-        logger.error("[authRoutes] Failed to parse initData:", error);
-        return res.status(400).json({ error: "Invalid initData" });
+    // 1. Верификация данных от Telegram
+    const verification = await verifyTelegramInitData(initData, process.env.TELEGRAM_BOT_TOKEN!);
+    if (!verification) {
+        logger.warn(`Failed login attempt from initData: Invalid signature.`);
+        return res.status(401).json({ error: "Invalid Telegram data" });
     }
+
+    const telegramUser = verification.user;
 
     const telegramId = telegramUser.id.toString();
     let referralCode = bodyReferralCode || new URLSearchParams(initData).get("start_param");

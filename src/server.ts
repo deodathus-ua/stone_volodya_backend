@@ -1,10 +1,12 @@
-// src/server.ts
+import dotenv from "dotenv";
+dotenv.config();
+
 import express from "express";
 import { createServer } from "http";
 import { Server } from "socket.io";
 import cors from "cors";
-import dotenv from "dotenv";
 import logger from "./logger";
+import { supabase } from "./config/supabase";
 
 import authRoutes from "./routes/auth";
 import userRoutes from "./routes/user";
@@ -18,8 +20,6 @@ import bot from "./bot";
 
 import { initSocketHandlers } from "./socket/socketHandler";
 import { startBackgroundJobs } from "./jobs/backgroundJobs";
-
-dotenv.config();
 
 const app = express();
 const server = createServer(app);
@@ -59,7 +59,12 @@ if (process.env.NODE_ENV === "production") {
 }
 
 app.get("/", (req, res) => {
-    res.send("Stone Volodya Server is running!");
+    res.json({
+        status: "online",
+        environment: process.env.NODE_ENV,
+        bot_webhook: process.env.NODE_ENV === "production",
+        uptime: process.uptime()
+    });
 });
 
 // Initialize Handlers & Jobs
@@ -75,6 +80,18 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, async () => {
     logger.info(`Server running on port ${PORT} (PID: ${process.pid})`);
     logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
+
+    // Проверка соединения с Supabase
+    try {
+        const { error } = await supabase.from("users").select("id").limit(1);
+        if (error) {
+            logger.error(`[Startup] Supabase connection check failed: ${error.message}`);
+        } else {
+            logger.info(`[Startup] Supabase connection successful.`);
+        }
+    } catch (e: any) {
+        logger.error(`[Startup] Supabase connection error: ${e.message}`);
+    }
 
     // Автоматическая установка Webhook в продакшене
     if (process.env.NODE_ENV === "production" && process.env.RENDER_EXTERNAL_URL) {
